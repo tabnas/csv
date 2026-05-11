@@ -12,7 +12,7 @@ import { Csv } from '../dist/csv'
 
 const Spectrum = require('csv-spectrum')
 
-const fixturesDir = join(__dirname, '..', 'test', 'fixtures')
+const fixturesDir = join(__dirname, '..', '..', 'test', 'fixtures')
 const manifest = JSON.parse(
   readFileSync(join(fixturesDir, 'manifest.json'), 'utf8'),
 )

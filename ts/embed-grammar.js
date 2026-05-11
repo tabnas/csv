@@ -8,7 +8,7 @@ const path = require('path')
 
 const GRAMMAR_FILE = path.join(__dirname, 'csv-grammar.jsonic')
 const TS_FILE = path.join(__dirname, 'src', 'csv.ts')
-const GO_FILE = path.join(__dirname, 'go', 'csv.go')
+const GO_FILE = path.join(__dirname, '..', 'go', 'csv.go')
 
 const BEGIN = '// --- BEGIN EMBEDDED csv-grammar.jsonic ---'
 const END = '// --- END EMBEDDED csv-grammar.jsonic ---'
