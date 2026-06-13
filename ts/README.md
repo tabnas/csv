@@ -52,8 +52,8 @@ result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 
 ## Documentation
 
-Full documentation following the [Diataxis](https://diataxis.fr)
-framework (tutorials, how-to guides, explanation, reference):
+Full documentation — tutorials, how-to guides, reference, and
+explanation:
 
 - [TypeScript documentation](doc/csv-ts.md)
 - [Go documentation](doc/csv-go.md)

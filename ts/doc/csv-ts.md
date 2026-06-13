@@ -5,10 +5,9 @@ CSV text into JavaScript values. Headers, quoted fields, custom
 delimiters, streaming, and a strict / non-strict mode are all
 supported.
 
-This document follows the [Diataxis](https://diataxis.fr) framework:
-a guided **tutorial** for first-time use, focused **how-to guides**
-for common problems, complete **reference** material, and
-**explanation** of the design.
+This document is organised into four parts: a guided **tutorial**
+for first-time use, focused **how-to guides** for common problems,
+complete **reference** material, and **explanation** of the design.
 
 ---
 
@@ -298,11 +297,14 @@ match the header's:
 const parse = Jsonic.make().use(Csv, { field: { exact: true } })
 
 parse('a,b\n1,2,3')
-// throws: 'unexpected extra field value: 3'
+// throws; error code 'csv_extra_field'
 
 parse('a,b\n1')
-// throws: 'missing field'
+// throws; error code 'csv_missing_field'
 ```
+
+The thrown error's `code` property is `csv_extra_field` or
+`csv_missing_field`. See [Errors](#errors).
 
 ### Allow JSON values inside fields
 
@@ -317,8 +319,8 @@ parse('a,b,c\ntrue,[1,2],{x:{y:"q"}}')
 // [{ a: true, b: [1, 2], c: { x: { y: 'q' } } }]
 ```
 
-Non-strict mode also enables `trim`, `comment`, and `number` by
-default. See *Explanation: Strict vs non-strict*.
+Non-strict mode also enables `trim`, `comment`, `number`, and
+`value` by default. See *Explanation: Strict vs non-strict*.
 
 ### Stream records to a callback
 
@@ -385,7 +387,7 @@ All keys are optional.
 | `trim` | `boolean \| null` | `null` | Trim leading/trailing whitespace from fields. `null` resolves to `false` in strict mode and `true` in non-strict. |
 | `comment` | `boolean \| null` | `null` | Strip `#` comments. `null` resolves to `false` in strict / `true` in non-strict. |
 | `number` | `boolean \| null` | `null` | Parse numeric literals into `number`. `null` resolves to `false` strict / `true` non-strict. |
-| `value` | `boolean \| null` | `null` | Parse the literals `true`, `false`, `null` into their JS values. `null` resolves to `false` in both modes. |
+| `value` | `boolean \| null` | `null` | Parse the literals `true`, `false`, `null` into their JS values. `null` resolves to `false` in strict / `true` in non-strict. |
 | `header` | `boolean` | `true` | Treat the first record as field names. |
 | `object` | `boolean` | `true` | Emit each record as `Record<string, any>`; if `false`, emit `string[]`. |
 | `stream` | `(what, payload?) => void \| null` | `null` | Streaming callback. See [Streaming callback](#streaming-callback). |
@@ -525,8 +527,8 @@ and null literals stay as strings unless you explicitly enable
 *as Jsonic*. So `[1,2]` becomes the array `[1, 2]`, `{x:1}`
 becomes `{ x: 1 }`, and quoted strings honour Jsonic's escape
 rules rather than CSV's. To make this convenient, non-strict mode
-also flips `trim`, `comment`, and `number` on by default. The
-trade-off is that pure-CSV quirks (unescaped quotes, certain
+also flips `trim`, `comment`, `number`, and `value` on by default.
+The trade-off is that pure-CSV quirks (unescaped quotes, certain
 malformed cells) may no longer be tolerated.
 
 In practice: use strict for ingesting CSV from the outside world.

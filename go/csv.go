@@ -78,6 +78,7 @@ const grammarText = `
   ]
 }
 `
+
 // --- END EMBEDDED csv-grammar.jsonic ---
 
 // Csv is a jsonic plugin that adds CSV parsing support.
@@ -277,9 +278,23 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 							if len(record) > len(fields) {
 								errCode = "csv_extra_field"
 							}
-							ctx.ParseErr = &jsonic.Token{
-								Name: "#BD", Tin: jsonic.TinBD,
-								Why: errCode, Src: errCode,
+							// Mirror the TS `ctx.t0.bad(errCode)`: mark the current
+							// lookahead token as bad with the CSV-specific error code
+							// and halt the parse.
+							//
+							// NOTE: jsonic-go's parser currently surfaces any ParseErr
+							// under the generic "unexpected" code — it does not yet
+							// propagate a bad token's custom Err code the way jsonic-ts
+							// does. So the error code reported to callers is "unexpected"
+							// rather than csv_extra_field / csv_missing_field. The token
+							// still carries the specific code (via Bad) for forward
+							// compatibility once jsonic-go honours it. See AGENTS.md.
+							if ctx.T0 != nil {
+								ctx.ParseErr = ctx.T0.Bad(errCode)
+							} else {
+								ctx.ParseErr = (&jsonic.Token{
+									Name: "#BD", Tin: jsonic.TinBD,
+								}).Bad(errCode)
 							}
 							return
 						}
@@ -835,4 +850,3 @@ func toString(v any) string {
 func boolPtr(b bool) *bool {
 	return &b
 }
-
