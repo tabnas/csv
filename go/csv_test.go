@@ -197,6 +197,53 @@ func TestEmptyRecords(t *testing.T) {
 		{"a": "1"}, {"a": ""}, {"a": "2"}, {"a": "3"},
 		{"a": ""}, {"a": ""}, {"a": "4"},
 	})
+
+	// Empty input yields no records.
+	if r, _ := csvParse("\n"); len(r) != 0 {
+		t.Errorf("empty-input: expected 0 records, got %v", r)
+	}
+
+	// Leading/trailing blank lines (CRLF) are ignored.
+	result3, _ := csvParse("\r\n\r\na,b\r\nA,B\r\n\r\n")
+	assertRecords(t, "empty-edges", result3, []map[string]any{
+		{"a": "A", "b": "B"},
+	})
+
+	// Comment lines are dropped and do not become empty records.
+	result4, _ := csvParse("a#X\n1\n#Y\n2\n3\n\n#Z\n4\n#Q",
+		map[string]any{"comment": true})
+	assertRecords(t, "empty-comments", result4, []map[string]any{
+		{"a": "1"}, {"a": "2"}, {"a": "3"}, {"a": "4"},
+	})
+
+	// With record.empty, dropped comment lines still do not become records,
+	// but genuine blank lines do.
+	result5, _ := csvParse("a#X\n1\n#Y\n2\n3\n\n#Z\n4\n#Q",
+		map[string]any{"comment": true, "record": map[string]any{"empty": true}})
+	assertRecords(t, "empty-comments-preserved", result5, []map[string]any{
+		{"a": "1"}, {"a": ""}, {"a": "2"}, {"a": "3"},
+		{"a": ""}, {"a": ""}, {"a": "4"},
+	})
+}
+
+// TestFieldExact checks that field.exact halts the parse on field-count
+// mismatches. NOTE: jsonic-go surfaces the error under the generic
+// "unexpected" code rather than csv_extra_field / csv_missing_field (see
+// the note in csv.go and AGENTS.md); this test asserts the parse fails.
+func TestFieldExact(t *testing.T) {
+	if _, err := csvParse("a,b\n1,2,3",
+		map[string]any{"field": map[string]any{"exact": true}}); err == nil {
+		t.Errorf("exact extra: expected error, got none")
+	}
+	if _, err := csvParse("a,b\n1",
+		map[string]any{"field": map[string]any{"exact": true}}); err == nil {
+		t.Errorf("exact missing: expected error, got none")
+	}
+	// Matching field counts parse cleanly.
+	if _, err := csvParse("a,b\n1,2",
+		map[string]any{"field": map[string]any{"exact": true}}); err != nil {
+		t.Errorf("exact match: unexpected error: %v", err)
+	}
 }
 
 func TestHeader(t *testing.T) {
@@ -210,6 +257,65 @@ func TestHeader(t *testing.T) {
 		{"field~0": "a", "field~1": "b"},
 		{"field~0": "A", "field~1": "B"},
 	})
+
+	// header:false with object:false yields every row as a slice.
+	resultArr, _ := csvParse("\na,b\nA,B",
+		map[string]any{"header": false, "object": false})
+	if !reflect.DeepEqual(resultArr, []any{
+		[]any{"a", "b"}, []any{"A", "B"},
+	}) {
+		t.Errorf("no-header-array: got %#v", resultArr)
+	}
+
+	// header:false with explicit field.names yields named objects for
+	// every row, including the one that would otherwise be the header.
+	resultNames, _ := csvParse("\na,b\nA,B", map[string]any{
+		"header": false,
+		"field":  map[string]any{"names": []string{"a", "b"}},
+	})
+	assertRecords(t, "field-names", resultNames, []map[string]any{
+		{"a": "a", "b": "b"},
+		{"a": "A", "b": "B"},
+	})
+}
+
+// TestComma mirrors the TS `comma` test: leading/trailing separators
+// produce empty fields, and unnamed overflow columns get field~N keys.
+func TestComma(t *testing.T) {
+	cases := []struct {
+		src  string
+		want []map[string]any
+	}{
+		{"a\n1,", []map[string]any{{"a": "1", "field~1": ""}}},
+		{"a\n,1", []map[string]any{{"a": "", "field~1": "1"}}},
+		{"a,b\n1,2,", []map[string]any{{"a": "1", "b": "2", "field~2": ""}}},
+		{"a,b\n,1,2", []map[string]any{{"a": "", "b": "1", "field~2": "2"}}},
+		{"a\n1,\n", []map[string]any{{"a": "1", "field~1": ""}}},
+		{"a,b\n1,2,\n", []map[string]any{{"a": "1", "b": "2", "field~2": ""}}},
+	}
+	for _, c := range cases {
+		r, err := csvParse(c.src)
+		if err != nil {
+			t.Errorf("comma %q: %v", c.src, err)
+			continue
+		}
+		assertRecords(t, "comma "+c.src, r, c.want)
+	}
+
+	// Leading blank line yields no records.
+	if r, _ := csvParse("\na"); len(r) != 0 {
+		t.Errorf("comma leading-blank: expected 0 records, got %v", r)
+	}
+
+	// object:false variants.
+	ra, _ := csvParse("a\n1,", map[string]any{"object": false})
+	if !reflect.DeepEqual(ra, []any{[]any{"1", ""}}) {
+		t.Errorf("comma array trailing: got %#v", ra)
+	}
+	rb, _ := csvParse("a,b\n,1,2", map[string]any{"object": false})
+	if !reflect.DeepEqual(rb, []any{[]any{"", "1", "2"}}) {
+		t.Errorf("comma array leading: got %#v", rb)
+	}
 }
 
 func TestDoubleQuotes(t *testing.T) {
@@ -223,6 +329,7 @@ func TestDoubleQuotes(t *testing.T) {
 		{`a` + "\n" + `"""b"""`, `"b"`},
 		{`a` + "\n" + `"b""c"`, `b"c`},
 		{`a` + "\n" + `"b""c""d"`, `b"c"d`},
+		{`a` + "\n" + `"b""c""d""e"`, `b"c"d"e`},
 		{`a` + "\n" + `"""""b"`, `""b`},
 		{`a` + "\n" + `"b"""""`, `b""`},
 		{`a` + "\n" + `"""""b"""""`, `""b""`},
@@ -276,6 +383,14 @@ func TestComment(t *testing.T) {
 
 	r3, _ := csvParse("a\n b #c", map[string]any{"comment": true})
 	assertField(t, "comment-inline", r3, "a", " b ")
+
+	// Non-strict mode enables comment (and trim) by default.
+	r4, _ := csvParse("a\n# b", map[string]any{"strict": false})
+	if len(r4) != 0 {
+		t.Errorf("comment-nonstrict: expected 0 records, got %d", len(r4))
+	}
+	r5, _ := csvParse("a\n b ", map[string]any{"strict": false})
+	assertField(t, "comment-nonstrict-trim", r5, "a", "b")
 }
 
 func TestNumber(t *testing.T) {
@@ -286,6 +401,22 @@ func TestNumber(t *testing.T) {
 	m := toMap(r2[0])
 	if m["a"] != float64(1) {
 		t.Errorf("number: expected 1 (float64), got %v (%T)", m["a"], m["a"])
+	}
+
+	// Exponent notation is parsed when number is enabled.
+	r3, _ := csvParse("a\n1e2", map[string]any{"number": true})
+	if toMap(r3[0])["a"] != float64(100) {
+		t.Errorf("number-exp: expected 100, got %v", toMap(r3[0])["a"])
+	}
+
+	// Strict mode keeps numbers as strings unless opted in.
+	r4, _ := csvParse("a\n1e2")
+	assertField(t, "number-strict-string", r4, "a", "1e2")
+
+	// Non-strict mode coerces numbers by default.
+	r5, _ := csvParse("a\n1e2", map[string]any{"strict": false})
+	if toMap(r5[0])["a"] != float64(100) {
+		t.Errorf("number-nonstrict: expected 100, got %v", toMap(r5[0])["a"])
 	}
 }
 
@@ -411,6 +542,12 @@ func TestUnstrict(t *testing.T) {
 	row1 := toMap(r3[1])
 	if row1["a"] != "x" || row1["b"] != "y'y" || row1["c"] != `z"z` {
 		t.Errorf("unstrict full row1: got %v", row1)
+	}
+
+	// Trailing content after a complete embedded value is a syntax error,
+	// mirroring the TS `assert.throws(() => j('a\n{x:1}y'), /unexpected/)`.
+	if _, err := csvParse("a\n{x:1}y", map[string]any{"strict": false}); err == nil {
+		t.Errorf("unstrict trailing-garbage: expected error, got none")
 	}
 }
 

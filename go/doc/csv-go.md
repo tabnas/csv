@@ -5,10 +5,9 @@ CSV text into Go values. Headers, quoted fields, custom
 delimiters, streaming, and a strict / non-strict mode are all
 supported.
 
-This document follows the [Diataxis](https://diataxis.fr) framework:
-a guided **tutorial** for first-time use, focused **how-to guides**
-for common problems, complete **reference** material, and
-**explanation** of the design.
+This document is organised into four parts: a guided **tutorial**
+for first-time use, focused **how-to guides** for common problems,
+complete **reference** material, and **explanation** of the design.
 
 ---
 
@@ -321,8 +320,11 @@ j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
 })
 
 _, err := j.Parse("a,b\n1,2,3")
-// err is non-nil; the message is "unexpected extra field value: 3"
+// err is non-nil
 ```
+
+The parse halts with a non-nil error. See [Errors](#errors) for a
+note on the surfaced error code.
 
 ### Allow Jsonic values inside fields
 
@@ -337,8 +339,8 @@ result, _ := j.Parse("a,b,c\ntrue,[1,2],{x:1}")
 // [{a: true, b: [1 2], c: {x: 1}}]
 ```
 
-Non-strict mode also enables `trim`, `comment`, and `number` by
-default. Numbers come back as `float64`.
+Non-strict mode also enables `trim`, `comment`, `number`, and
+`value` by default. Numbers come back as `float64`.
 
 ### Use a different quote character
 
@@ -428,7 +430,7 @@ Top-level keys (set on the options map passed to `UseDefaults`):
 | `trim`    | `bool` or `nil`         | `nil`   | `nil` resolves to `false` strict / `true` non-strict |
 | `comment` | `bool` or `nil`         | `nil`   | `nil` resolves to `false` strict / `true` non-strict |
 | `number`  | `bool` or `nil`         | `nil`   | `nil` resolves to `false` strict / `true` non-strict |
-| `value`   | `bool` or `nil`         | `nil`   | Parse `true` / `false` / `null` literals          |
+| `value`   | `bool` or `nil`         | `nil`   | Parse `true` / `false` / `null` literals; `nil` resolves to `false` strict / `true` non-strict |
 | `header`  | `bool`                  | `true`  | First row is field names                          |
 | `object`  | `bool`                  | `true`  | Object output (`true`) vs slice output (`false`)  |
 | `strict`  | `bool`                  | `true`  | Disable Jsonic syntax inside fields               |
@@ -487,14 +489,18 @@ func(what string, payload any)
 
 ### Errors
 
-Field-count violations under `field.exact` raise these error
-codes (the parser returns an `error` whose code matches one of
-these):
+`field.exact` violations halt the parse with a non-nil error.
+The TypeScript build (canonical) reports these under the
+dedicated codes `csv_extra_field` and `csv_missing_field`.
 
-| Code                | Message                                  |
-|---------------------|------------------------------------------|
-| `csv_extra_field`   | `unexpected extra field value: <src>`    |
-| `csv_missing_field` | `missing field`                          |
+> **Note (Go):** the underlying `jsonic/go` parser does not yet
+> propagate a custom bad-token error code, so the error returned
+> from `Parse` currently carries the generic `unexpected` code
+> rather than `csv_extra_field` / `csv_missing_field`. The plugin
+> already tags the offending token with the specific code, so
+> parity follows automatically once `jsonic/go` honours it. Treat
+> a non-nil error from a `field.exact` parser as a field-count
+> violation. See `AGENTS.md` for details.
 
 Other errors come from Jsonic itself (e.g. unterminated quoted
 strings).
@@ -531,9 +537,9 @@ work too — `[1,2]` becomes `[]any{1, 2}`, `{x:1}` becomes
 `map[string]any{"x": 1}`. Quoted strings honour Jsonic's escape
 rules (e.g. `"a\"b"`) rather than CSV's `""`-doubling. To make
 this convenient, non-strict mode also flips `trim`, `comment`,
-and `number` on by default. The trade-off is that pure-CSV
-quirks (unescaped quotes, some malformed cells) may no longer
-be tolerated.
+`number`, and `value` on by default. The trade-off is that
+pure-CSV quirks (unescaped quotes, some malformed cells) may no
+longer be tolerated.
 
 In practice: use strict for ingesting CSV from the outside world.
 Use non-strict when the file is your own and you want richer
