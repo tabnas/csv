@@ -1,4 +1,4 @@
-# @jsonic/csv — Go
+# @tabnas/csv — Go
 
 A [Jsonic](https://jsonic.senecajs.org) syntax plugin that parses
 CSV text into Go values. Headers, quoted fields, custom
@@ -24,17 +24,17 @@ complete **reference** material, and **explanation** of the design.
 ## Install
 
 ```bash
-go get github.com/jsonicjs/csv/go
+go get github.com/tabnas/csv/go
 ```
 
-The module path is `github.com/jsonicjs/csv/go` and is normally
+The module path is `github.com/tabnas/csv/go` and is normally
 imported with the alias `csv`. It depends on
-`github.com/jsonicjs/jsonic/go` for the underlying parser.
+`github.com/tabnas/jsonic/go` for the underlying parser.
 
 ```go
 import (
-    csv "github.com/jsonicjs/csv/go"
-    jsonic "github.com/jsonicjs/jsonic/go"
+    csv "github.com/tabnas/csv/go"
+    jsonic "github.com/tabnas/jsonic/go"
 )
 ```
 
@@ -68,8 +68,8 @@ package main
 import (
     "fmt"
 
-    csv "github.com/jsonicjs/csv/go"
-    jsonic "github.com/jsonicjs/jsonic/go"
+    csv "github.com/tabnas/csv/go"
+    jsonic "github.com/tabnas/jsonic/go"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-# @jsonic/csv
+# @tabnas/csv
 
 A [Jsonic](https://jsonic.senecajs.org) syntax plugin that parses
 CSV text into objects or arrays, with support for headers, quoted
@@ -6,12 +6,12 @@ fields, custom delimiters, streaming, and strict/non-strict modes.
 Available for TypeScript and Go.
 
 
-[![npm version](https://img.shields.io/npm/v/@jsonic/csv.svg)](https://npmjs.com/package/@jsonic/csv)
-[![build](https://github.com/jsonicjs/csv/actions/workflows/build.yml/badge.svg)](https://github.com/jsonicjs/csv/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/jsonicjs/csv/badge.svg?branch=main)](https://coveralls.io/github/jsonicjs/csv?branch=main)
-[![Known Vulnerabilities](https://snyk.io/test/github/jsonicjs/csv/badge.svg)](https://snyk.io/test/github/jsonicjs/csv)
+[![npm version](https://img.shields.io/npm/v/@tabnas/csv.svg)](https://npmjs.com/package/@tabnas/csv)
+[![build](https://github.com/tabnas/csv/actions/workflows/build.yml/badge.svg)](https://github.com/tabnas/csv/actions/workflows/build.yml)
+[![Coverage Status](https://coveralls.io/repos/github/tabnas/csv/badge.svg?branch=main)](https://coveralls.io/github/tabnas/csv?branch=main)
+[![Known Vulnerabilities](https://snyk.io/test/github/tabnas/csv/badge.svg)](https://snyk.io/test/github/tabnas/csv)
 [![DeepScan grade](https://deepscan.io/api/teams/5016/projects/22466/branches/663906/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=5016&pid=22466&bid=663906)
-[![Maintainability](https://api.codeclimate.com/v1/badges/10e9bede600896c77ce8/maintainability)](https://codeclimate.com/github/jsonicjs/csv/maintainability)
+[![Maintainability](https://api.codeclimate.com/v1/badges/10e9bede600896c77ce8/maintainability)](https://codeclimate.com/github/tabnas/csv/maintainability)
 
 | ![Voxgig](https://www.voxgig.com/res/img/vgt01r.png) | This open source module is sponsored and supported by [Voxgig](https://www.voxgig.com). |
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
@@ -22,8 +22,8 @@ Available for TypeScript and Go.
 **TypeScript**
 
 ```typescript
-import { Jsonic } from 'jsonic'
-import { Csv } from '@jsonic/csv'
+import { Jsonic } from '@tabnas/jsonic'
+import { Csv } from '@tabnas/csv'
 
 const parse = Jsonic.make().use(Csv)
 
@@ -38,8 +38,8 @@ parse('a,b\n1,"hello, world"')
 
 ```go
 import (
-    csv "github.com/jsonicjs/csv/go"
-    jsonic "github.com/jsonicjs/jsonic/go"
+    csv "github.com/tabnas/csv/go"
+    jsonic "github.com/tabnas/jsonic/go"
 )
 
 j := jsonic.Make()

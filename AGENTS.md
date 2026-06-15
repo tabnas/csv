@@ -1,4 +1,4 @@
-# Agent guide — `@jsonic/csv`
+# Agent guide — `@tabnas/csv`
 
 Guidance for AI agents (and humans) working in this repository.
 Keep this file accurate when you change build steps, layout, or
@@ -93,7 +93,7 @@ release), install it from the GitHub `main` tarball, e.g.:
 
 ```bash
 curl -sSL -o /tmp/jsonic-main.tar.gz \
-  https://github.com/jsonicjs/jsonic/archive/refs/heads/main.tar.gz
+  https://github.com/tabnas/jsonic/archive/refs/heads/main.tar.gz
 # unpack, `npm pack`, then `npm install --no-save <the-tgz>` in ts/
 ```
 
@@ -104,7 +104,7 @@ cd go
 go test ./...          # requires module network access for jsonic/go
 ```
 
-`go/go.mod` requires `github.com/jsonicjs/jsonic/go` at the version
+`go/go.mod` requires `github.com/tabnas/jsonic/go` at the version
 that corresponds to jsonic `main` (currently `v0.1.22`; `main`
 HEAD is tagged at that version). Keep `go.sum` tidy with
 `go mod tidy`.
@@ -112,7 +112,7 @@ HEAD is tagged at that version). Keep `go.sum` tidy with
 ## Dependencies
 
 - **jsonic** (the parser this plugins into). TS: peer dependency
-  `jsonic >= 2`. Go: `github.com/jsonicjs/jsonic/go`. Track
+  `jsonic >= 2`. Go: `github.com/tabnas/jsonic/go`. Track
   `main`.
 - The plugin reuses jsonic's lexer, parser, comment handling, and
   streaming hooks rather than re-implementing them.
@@ -125,7 +125,7 @@ statements.
 Go:
 
 ```go
-import jsonic "github.com/jsonicjs/jsonic/go"
+import jsonic "github.com/tabnas/jsonic/go"
 
 j := jsonic.Make()
 j.Use(jsonic.Debug, map[string]any{"trace": true}) // [lex]/[rule] trace

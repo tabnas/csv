@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 import Util from 'util'
 
-import { Jsonic } from 'jsonic'
+import { Jsonic } from '@tabnas/jsonic'
 import { Csv } from '../dist/csv'
 
 const Spectrum = require('csv-spectrum')

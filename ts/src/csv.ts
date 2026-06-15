@@ -10,7 +10,7 @@ import {
   Config,
   Options,
   Lex,
-} from 'jsonic'
+} from '@tabnas/jsonic'
 
 // See defaults below for commentary.
 type CsvOptions = {

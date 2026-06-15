@@ -1,4 +1,4 @@
-# @jsonic/csv — TypeScript
+# @tabnas/csv — TypeScript
 
 A [Jsonic](https://jsonic.senecajs.org) syntax plugin that parses
 CSV text into JavaScript values. Headers, quoted fields, custom
@@ -24,7 +24,7 @@ complete **reference** material, and **explanation** of the design.
 ## Install
 
 ```bash
-npm install @jsonic/csv jsonic
+npm install @tabnas/csv @tabnas/jsonic
 ```
 
 `jsonic` (>= 2) is a peer dependency. The plugin re-uses Jsonic's
@@ -32,8 +32,8 @@ lexer and parser, so you always create a Jsonic instance and
 register the plugin on it.
 
 ```typescript
-import { Jsonic } from 'jsonic'
-import { Csv } from '@jsonic/csv'
+import { Jsonic } from '@tabnas/jsonic'
+import { Csv } from '@tabnas/csv'
 
 const parse = Jsonic.make().use(Csv)
 ```
@@ -57,8 +57,8 @@ Make a Jsonic instance, register the plugin, and call it with a
 string:
 
 ```typescript
-import { Jsonic } from 'jsonic'
-import { Csv } from '@jsonic/csv'
+import { Jsonic } from '@tabnas/jsonic'
+import { Csv } from '@tabnas/csv'
 
 const parse = Jsonic.make().use(Csv)
 
@@ -370,7 +370,7 @@ const b = parse('p,q\n3,4')
 ### `Csv: Plugin`
 
 ```typescript
-import { Csv } from '@jsonic/csv'
+import { Csv } from '@tabnas/csv'
 const parse = Jsonic.make().use(Csv, options?)
 ```
 
@@ -490,7 +490,7 @@ Other errors come from Jsonic itself (e.g. `unterminated_string`).
 ### `buildCsvStringMatcher(opts)`
 
 ```typescript
-import { buildCsvStringMatcher } from '@jsonic/csv'
+import { buildCsvStringMatcher } from '@tabnas/csv'
 ```
 
 Factory for the custom CSV double-quote string matcher. Exported

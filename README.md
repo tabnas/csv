@@ -1,4 +1,4 @@
-# @jsonic/csv
+# @tabnas/csv
 
 This plugin allows the [Jsonic](https://jsonic.senecajs.org) JSON parser to support csv syntax.
 
