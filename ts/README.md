@@ -60,6 +60,16 @@ explanation:
 - [Go documentation](doc/csv-go.md)
 
 
+
+## Grammar diagram
+
+The installed grammar as a railroad/syntax diagram, generated from the live
+grammar with [`@tabnas/railroad`](https://github.com/tabnas/railroad):
+
+![csv grammar railroad diagram](doc/grammar.svg)
+
+A vertical ASCII version is in [`doc/grammar.txt`](doc/grammar.txt).
+
 ## License
 
 Copyright (c) 2021-2025 Richard Rodger and other contributors,
