@@ -24,23 +24,26 @@ complete **reference** material, and **explanation** of the design.
 ## Install
 
 ```bash
-npm install @tabnas/csv @tabnas/jsonic
+npm install @tabnas/csv @tabnas/parser @tabnas/jsonic
 ```
 
-`jsonic` (>= 2) is a peer dependency. The plugin re-uses Jsonic's
-lexer and parser, so you always create a Jsonic instance and
+`@tabnas/parser` is the parsing engine and `jsonic` (>= 2)
+provides the base JSON grammar; both are peer dependencies. The
+plugin re-uses the parser's lexer and the jsonic grammar, so you
+always create a Tabnas instance, load the jsonic grammar, and
 register the plugin on it.
 
 ```typescript
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv)
+const parse = new Tabnas().use(jsonic).use(Csv)
 ```
 
-`parse` is now a function that accepts a CSV string and returns
-the parsed result. Reuse it for as many inputs as you need — each
-call is independent.
+`parse` is now a Tabnas instance whose `.parse()` method accepts a
+CSV string and returns the parsed result. Reuse it for as many
+inputs as you need — each call is independent.
 
 ---
 
@@ -57,12 +60,13 @@ Make a Jsonic instance, register the plugin, and call it with a
 string:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv)
+const parse = new Tabnas().use(jsonic).use(Csv)
 
-parse('name,age\nAlice,30\nBob,25') // => [{ name: 'Alice', age: '30' }, { name: 'Bob', age: '25' }]
+parse.parse('name,age\nAlice,30\nBob,25') // => [{ name: 'Alice', age: '30' }, { name: 'Bob', age: '25' }]
 ```
 
 The first row was treated as a header (this is the default), and
@@ -77,12 +81,13 @@ type coercion, enable `number` (and optionally `value` for the
 literals `true`, `false`, `null`):
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { number: true, value: true })
+const parse = new Tabnas().use(jsonic).use(Csv, { number: true, value: true })
 
-parse('name,age,active\nAlice,30,true\nBob,25,false') // => [{ name: 'Alice', age: 30, active: true }, { name: 'Bob', age: 25, active: false }]
+parse.parse('name,age,active\nAlice,30,true\nBob,25,false') // => [{ name: 'Alice', age: 30, active: true }, { name: 'Bob', age: 25, active: false }]
 ```
 
 These options are independent — turn on whichever ones the data
@@ -95,12 +100,13 @@ Wrap a field in `"` to include commas, newlines, or quotes in the
 value; double a quote (`""`) to escape it.
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv)
+const parse = new Tabnas().use(jsonic).use(Csv)
 
-parse('name,bio\nAlice,"Likes ""cats"" and dogs"\nBob,"line 1\nline 2"') // => [{ name: 'Alice', bio: 'Likes "cats" and dogs' }, { name: 'Bob', bio: 'line 1\nline 2' }]
+parse.parse('name,bio\nAlice,"Likes ""cats"" and dogs"\nBob,"line 1\nline 2"') // => [{ name: 'Alice', bio: 'Likes "cats" and dogs' }, { name: 'Bob', bio: 'line 1\nline 2' }]
 ```
 
 The plugin ships its own quoted-string lexer to follow RFC 4180
@@ -115,7 +121,7 @@ result is `[]`:
 ```typescript
 import { createReadStream } from 'node:fs'
 
-const parse = Jsonic.make().use(Csv, {
+const parse = new Tabnas().use(jsonic).use(Csv, {
   number: true,
   stream: (event, payload) => {
     if (event === 'record') {
@@ -129,7 +135,7 @@ const parse = Jsonic.make().use(Csv, {
 
 // Parse the whole string in one shot — records flow through the
 // callback as they are produced.
-parse('a,b\n1,2\n3,4')
+parse.parse('a,b\n1,2\n3,4')
 ```
 
 You now have the four shapes — basic parse, type coercion, quoted
@@ -150,24 +156,26 @@ Set `object: false` to receive each record as a `string[]`. With
 internal field tracking and not emitted:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { object: false })
+const parse = new Tabnas().use(jsonic).use(Csv, { object: false })
 
-parse('a,b,c\n1,2,3\n4,5,6') // => [['1','2','3'], ['4','5','6']]
+parse.parse('a,b,c\n1,2,3\n4,5,6') // => [['1','2','3'], ['4','5','6']]
 ```
 
 To get every row out as an array, including the first, also set
 `header: false`:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { header: false, object: false })
+const parse = new Tabnas().use(jsonic).use(Csv, { header: false, object: false })
 
-parse('a,b,c\n1,2,3\n4,5,6') // => [['a','b','c'], ['1','2','3'], ['4','5','6']]
+parse.parse('a,b,c\n1,2,3\n4,5,6') // => [['a','b','c'], ['1','2','3'], ['4','5','6']]
 ```
 
 ### Parse a file with no header row
@@ -176,39 +184,42 @@ If your CSV has no header at all, use `header: false`. Combined
 with `object: false` you get plain arrays:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { header: false, object: false })
+const parse = new Tabnas().use(jsonic).use(Csv, { header: false, object: false })
 
-parse('1,2,3\n4,5,6') // => [['1','2','3'], ['4','5','6']]
+parse.parse('1,2,3\n4,5,6') // => [['1','2','3'], ['4','5','6']]
 ```
 
 With the default `object: true` and no field names supplied, the
 plugin invents keys (`field~0`, `field~1`, …):
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { header: false })
+const parse = new Tabnas().use(jsonic).use(Csv, { header: false })
 
-parse('1,2,3') // => [{ 'field~0': '1', 'field~1': '2', 'field~2': '3' }]
+parse.parse('1,2,3') // => [{ 'field~0': '1', 'field~1': '2', 'field~2': '3' }]
 ```
 
 If you still want object output but with names you supply, use
 `field.names`:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, {
+const parse = new Tabnas().use(jsonic).use(Csv, {
   header: false,
   field: { names: ['x', 'y', 'z'] },
 })
 
-parse('1,2,3\n4,5,6') // => [{ x: '1', y: '2', z: '3' }, { x: '4', y: '5', z: '6' }]
+parse.parse('1,2,3\n4,5,6') // => [{ x: '1', y: '2', z: '3' }, { x: '4', y: '5', z: '6' }]
 ```
 
 ### Use a different field delimiter
@@ -216,23 +227,25 @@ parse('1,2,3\n4,5,6') // => [{ x: '1', y: '2', z: '3' }, { x: '4', y: '5', z: '6
 Tab-separated, pipe-separated, or anything else:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { field: { separation: '\t' } })
+const parse = new Tabnas().use(jsonic).use(Csv, { field: { separation: '\t' } })
 
-parse('name\tage\nAlice\t30') // => [{ name: 'Alice', age: '30' }]
+parse.parse('name\tage\nAlice\t30') // => [{ name: 'Alice', age: '30' }]
 ```
 
 The separator can be more than one character:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { field: { separation: '~~' } })
+const parse = new Tabnas().use(jsonic).use(Csv, { field: { separation: '~~' } })
 
-parse('a~~b\n1~~2') // => [{ a: '1', b: '2' }]
+parse.parse('a~~b\n1~~2') // => [{ a: '1', b: '2' }]
 ```
 
 ### Use a different record delimiter
@@ -241,23 +254,25 @@ By default a record ends at `\n`, `\r\n`, or `\r`. Override with
 `record.separators`:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { record: { separators: '%' } })
+const parse = new Tabnas().use(jsonic).use(Csv, { record: { separators: '%' } })
 
-parse('a,b%1,2%3,4') // => [{ a: '1', b: '2' }, { a: '3', b: '4' }]
+parse.parse('a,b%1,2%3,4') // => [{ a: '1', b: '2' }, { a: '3', b: '4' }]
 ```
 
 ### Trim surrounding whitespace from fields
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { trim: true })
+const parse = new Tabnas().use(jsonic).use(Csv, { trim: true })
 
-parse('a,b\n  hello  ,  world  ') // => [{ a: 'hello', b: 'world' }]
+parse.parse('a,b\n  hello  ,  world  ') // => [{ a: 'hello', b: 'world' }]
 ```
 
 Internal whitespace is preserved — `'  hello world  '` trims to
@@ -268,12 +283,13 @@ Internal whitespace is preserved — `'  hello world  '` trims to
 Enable `comment` to strip lines starting with `#`:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { comment: true })
+const parse = new Tabnas().use(jsonic).use(Csv, { comment: true })
 
-parse('a,b\n# this row is ignored\n1,2') // => [{ a: '1', b: '2' }]
+parse.parse('a,b\n# this row is ignored\n1,2') // => [{ a: '1', b: '2' }]
 ```
 
 A `#` *inside* a field is left alone unless it follows whitespace
@@ -284,12 +300,13 @@ on its own — see *Explanation: Comments and whitespace*.
 Blank lines are skipped by default. To keep them:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { record: { empty: true } })
+const parse = new Tabnas().use(jsonic).use(Csv, { record: { empty: true } })
 
-parse('a\n1\n\n2') // => [{ a: '1' }, { a: '' }, { a: '2' }]
+parse.parse('a\n1\n\n2') // => [{ a: '1' }, { a: '' }, { a: '2' }]
 ```
 
 ### Substitute a value for empty fields
@@ -298,12 +315,13 @@ Use `field.empty` for the placeholder. Any value works, including
 `null` or a sentinel:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { field: { empty: null } })
+const parse = new Tabnas().use(jsonic).use(Csv, { field: { empty: null } })
 
-parse('a,b,c\n1,,3') // => [{ a: '1', b: null, c: '3' }]
+parse.parse('a,b,c\n1,,3') // => [{ a: '1', b: null, c: '3' }]
 ```
 
 ### Reject rows with the wrong number of fields
@@ -312,12 +330,12 @@ parse('a,b,c\n1,,3') // => [{ a: '1', b: null, c: '3' }]
 match the header's:
 
 ```typescript
-const parse = Jsonic.make().use(Csv, { field: { exact: true } })
+const parse = new Tabnas().use(jsonic).use(Csv, { field: { exact: true } })
 
-parse('a,b\n1,2,3')
+parse.parse('a,b\n1,2,3')
 // throws; error code 'csv_extra_field'
 
-parse('a,b\n1')
+parse.parse('a,b\n1')
 // throws; error code 'csv_missing_field'
 ```
 
@@ -331,12 +349,13 @@ non-strict mode and Jsonic re-engages — you get the JSON value
 back as a parsed JavaScript value:
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { strict: false })
+const parse = new Tabnas().use(jsonic).use(Csv, { strict: false })
 
-parse('a,b,c\ntrue,[1,2],{x:{y:"q"}}') // => [{ a: true, b: [1, 2], c: { x: { y: 'q' } } }]
+parse.parse('a,b,c\ntrue,[1,2],{x:{y:"q"}}') // => [{ a: true, b: [1, 2], c: { x: { y: 'q' } } }]
 ```
 
 Non-strict mode also enables `trim`, `comment`, `number`, and
@@ -351,38 +370,39 @@ because records are no longer collected:
 ```typescript
 const records: any[] = []
 
-const parse = Jsonic.make().use(Csv, {
+const parse = new Tabnas().use(jsonic).use(Csv, {
   stream: (what, payload) => {
     if (what === 'record') records.push(payload)
   },
 })
 
-parse('a,b\n1,2\n3,4')
+parse.parse('a,b\n1,2\n3,4')
 // records: [{ a: '1', b: '2' }, { a: '3', b: '4' }]
 ```
 
 ### Use a different quote character
 
 ```js
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv, { string: { quote: "'" } })
+const parse = new Tabnas().use(jsonic).use(Csv, { string: { quote: "'" } })
 
-parse("a,b\n'hi, there','x'") // => [{ a: 'hi, there', b: 'x' }]
+parse.parse("a,b\n'hi, there','x'") // => [{ a: 'hi, there', b: 'x' }]
 ```
 
 ### Reuse the same parser for many inputs
 
-The result of `Jsonic.make().use(Csv, opts)` is a parser function
+The result of `new Tabnas().use(jsonic).use(Csv, opts)` is a parser function
 that is fully reusable — there is no per-call cost beyond the
 parse itself:
 
 ```typescript
-const parse = Jsonic.make().use(Csv, { number: true })
+const parse = new Tabnas().use(jsonic).use(Csv, { number: true })
 
-const a = parse('x,y\n1,2')
-const b = parse('p,q\n3,4')
+const a = parse.parse('x,y\n1,2')
+const b = parse.parse('p,q\n3,4')
 ```
 
 ---
@@ -393,11 +413,11 @@ const b = parse('p,q\n3,4')
 
 ```typescript
 import { Csv } from '@tabnas/csv'
-const parse = Jsonic.make().use(Csv, options?)
+const parse = new Tabnas().use(jsonic).use(Csv, options?)
 ```
 
-The Jsonic plugin function. Pass it (and an optional options
-object) to `Jsonic.use()`. The plugin merges your options on top
+The Tabnas plugin function. Pass it (and an optional options
+object) to `Tabnas.use()`. The plugin merges your options on top
 of `Csv.defaults`, so you only specify what differs.
 
 ### `CsvOptions`

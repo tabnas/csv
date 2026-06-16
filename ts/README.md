@@ -22,15 +22,16 @@ Available for TypeScript and Go.
 **TypeScript**
 
 ```typescript
-import { Jsonic } from '@tabnas/jsonic'
+import { Tabnas } from '@tabnas/parser'
+import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
-const parse = Jsonic.make().use(Csv)
+const parse = new Tabnas().use(jsonic).use(Csv)
 
-parse("name,age\nAlice,30\nBob,25")
+parse.parse("name,age\nAlice,30\nBob,25")
 // [{ name: 'Alice', age: '30' }, { name: 'Bob', age: '25' }]
 
-parse('a,b\n1,"hello, world"')
+parse.parse('a,b\n1,"hello, world"')
 // [{ a: '1', b: 'hello, world' }]
 ```
 
@@ -58,6 +59,16 @@ explanation:
 - [TypeScript documentation](doc/csv-ts.md)
 - [Go documentation](doc/csv-go.md)
 
+
+
+## Grammar diagram
+
+The installed grammar as a railroad/syntax diagram, generated from the live
+grammar with [`@tabnas/railroad`](https://github.com/tabnas/railroad):
+
+![csv grammar railroad diagram](doc/grammar.svg)
+
+A vertical ASCII version is in [`doc/grammar.txt`](doc/grammar.txt).
 
 ## License
 

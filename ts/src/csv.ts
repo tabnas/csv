@@ -1,16 +1,19 @@
 /* Copyright (c) 2021-2025 Richard Rodger, MIT License */
 
-// Import Jsonic types used by plugins.
+// Import Tabnas parser engine and types used by plugins.
 import {
-  Jsonic,
+  Tabnas,
   Rule,
   RuleSpec,
   Plugin,
   Context,
   Config,
-  Options,
+  TabnasOptions,
   Lex,
-} from '@tabnas/jsonic'
+} from '@tabnas/parser'
+
+// The jsonic grammar plugin provides the base JSON grammar.
+import { jsonic } from '@tabnas/jsonic'
 
 // See defaults below for commentary.
 type CsvOptions = {
@@ -108,7 +111,7 @@ const grammarText = `
 // --- END EMBEDDED csv-grammar.jsonic ---
 
 // Plugin implementation.
-const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
+const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
   // Normalize boolean options.
   const strict = !!options.strict
   const objres = !!options.object
@@ -126,7 +129,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
   // In strict mode, Jsonic field content is not parsed.
   if (strict) {
     if (false !== options.string.csv) {
-      jsonic.options({
+      tn.options({
         lex: {
           match: {
             stringcsv: { order: 1e5, make: buildCsvStringMatcher(options) },
@@ -134,7 +137,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
         },
       })
     }
-    jsonic.options({
+    tn.options({
       rule: { exclude: 'jsonic,imp' },
     })
   }
@@ -142,7 +145,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
   // Fields may contain Jsonic content.
   else {
     if (true === options.string.csv) {
-      jsonic.options({
+      tn.options({
         lex: {
           match: {
             stringcsv: { order: 1e5, make: buildCsvStringMatcher(options) },
@@ -154,22 +157,22 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
     comment = null === options.comment ? true : comment
     opt_number = null === options.number ? true : opt_number
     opt_value = null === options.value ? true : opt_value
-    jsonic.options({
+    tn.options({
       rule: { exclude: 'imp' },
     })
   }
 
   // Stream rows as they are parsed, do not store in result.
   if (stream) {
-    let parser = jsonic.internal().parser
-    let origStart = parser.start.bind(parser)
-    parser.start = (...args: any[]) => {
+    let parser = tn.internal().parser
+    let origStart = parser.start.bind(parser) as (...args: any[]) => any
+    parser.start = ((...args: any[]) => {
       try {
         return origStart(...args)
       } catch (e: any) {
         stream('error', e)
       }
-    }
+    }) as typeof parser.start
   }
 
   let token: Record<string, any> = {}
@@ -224,7 +227,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
     },
   }
 
-  jsonic.options(jsonicOptions)
+  tn.options(jsonicOptions)
 
 
   // Named function references for declarative grammar definition.
@@ -355,21 +358,21 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
 
 
   // Usually [#TX, #ST, #NR, #VL]
-  let VAL = jsonic.tokenSet.VAL
+  let VAL = tn.tokenSet.VAL
 
-  let { LN, CA, SP, ZZ } = jsonic.token
+  let { LN, CA, SP, ZZ } = tn.token
 
-  // Parse embedded grammar definition using a separate standard Jsonic instance.
-  const grammarDef = Jsonic.make()(grammarText)
+  // Parse embedded grammar definition using a separate standard Tabnas instance.
+  const grammarDef = new Tabnas().use(jsonic).parse(grammarText)
   grammarDef.ref = refs
-  jsonic.grammar(grammarDef, { rule: { alt: { g: 'csv' } } })
+  tn.grammar(grammarDef, { rule: { alt: { g: 'csv' } } })
 
 
   // Rules list, elem, val are modified in code rather than the grammar file,
   // because in non-strict mode the default jsonic alternatives must be preserved
   // to support embedded JSON values like [1,2] and {x:1}.
 
-  jsonic.rule('list', (rs: RuleSpec) => {
+  tn.rule('list', (rs: RuleSpec) => {
     return rs
       .open([
         // If not ignoring empty fields, don't consume LN used to close empty record.
@@ -386,7 +389,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
       ])
   })
 
-  jsonic.rule('elem', (rs: RuleSpec) => {
+  tn.rule('elem', (rs: RuleSpec) => {
     return rs
       .open(
         [
@@ -417,7 +420,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
       )
   })
 
-  jsonic.rule('val', (rs: RuleSpec) => {
+  tn.rule('val', (rs: RuleSpec) => {
     return rs.open(
       [
         // Handle text and space concatentation
@@ -431,7 +434,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
   })
 
   // Close is called on final rule - set parent val node
-  jsonic.rule('text', (rs: RuleSpec) => {
+  tn.rule('text', (rs: RuleSpec) => {
     rs.bc((r: Rule) => {
       r.parent.node = undefined === r.child.node ? r.node : r.child.node
     })
@@ -442,7 +445,7 @@ const Csv: Plugin = (jsonic: Jsonic, options: CsvOptions) => {
 // Handles "a""b" -> "a"b" quoting wierdness.
 // This is a reduced copy of the standard Jsonic string matcher.
 function buildCsvStringMatcher(csvopts: CsvOptions) {
-  return function makeCsvStringMatcher(cfg: Config, _opts: Options) {
+  return function makeCsvStringMatcher(cfg: Config, _opts: TabnasOptions) {
     return function csvStringMatcher(lex: Lex) {
       let quoteMap: any = { [csvopts.string.quote]: true }
 
