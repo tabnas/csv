@@ -1,9 +1,9 @@
 # @tabnas/csv
 
-A [Jsonic](https://jsonic.senecajs.org) syntax plugin that parses
-CSV text into objects or arrays, with support for headers, quoted
-fields, custom delimiters, streaming, and strict/non-strict modes.
-Available for TypeScript and Go.
+A [Jsonic](https://jsonic.senecajs.org) / [Tabnas](https://github.com/tabnas/parser)
+syntax plugin that parses CSV text into objects or arrays, with support
+for headers, quoted fields, custom delimiters, streaming, and
+strict/non-strict modes.
 
 
 [![npm version](https://img.shields.io/npm/v/@tabnas/csv.svg)](https://npmjs.com/package/@tabnas/csv)
@@ -17,48 +17,40 @@ Available for TypeScript and Go.
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
 
 
-## Quick example
+## Install
 
-**TypeScript**
+```bash
+npm install @tabnas/csv @tabnas/parser @tabnas/jsonic
+```
 
-```typescript
+`@tabnas/parser` and `@tabnas/jsonic` are peer dependencies: you create
+a Tabnas instance, load the jsonic grammar, then register the plugin.
+
+
+## One tiny example
+
+```js
 import { Tabnas } from '@tabnas/parser'
 import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '@tabnas/csv'
 
 const parse = new Tabnas().use(jsonic).use(Csv)
 
-parse.parse("name,age\nAlice,30\nBob,25")
-// [{ name: 'Alice', age: '30' }, { name: 'Bob', age: '25' }]
-
-parse.parse('a,b\n1,"hello, world"')
-// [{ a: '1', b: 'hello, world' }]
-```
-
-**Go**
-
-```go
-import (
-    csv "github.com/tabnas/csv/go"
-    jsonic "github.com/tabnas/jsonic/go"
-)
-
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults)
-
-result, _ := j.Parse("name,age\nAlice,30\nBob,25")
-// [map[name:Alice age:30] map[name:Bob age:25]]
+parse.parse('name,age\nAlice,30\nBob,25') // => [{ name: 'Alice', age: '30' }, { name: 'Bob', age: '25' }]
 ```
 
 
 ## Documentation
 
-Full documentation — tutorials, how-to guides, reference, and
-explanation:
+Full documentation, in the four [Diátaxis](https://diataxis.fr)
+quadrants:
 
-- [TypeScript documentation](doc/csv-ts.md)
-- [Go documentation](doc/csv-go.md)
+- [Tutorial](doc/tutorial.md) — a guided first parse.
+- [How-to guide](doc/guide.md) — task recipes (delimiters, headers, streaming, …).
+- [Reference](doc/reference.md) — the public API, every option, and the grammar.
+- [Concepts](doc/concepts.md) — how the plugin works on the engine, and why.
 
+For the Go port, see [`../go/doc/`](../go/doc/).
 
 
 ## Grammar diagram
@@ -68,8 +60,8 @@ The grammar is defined in the repo-root
 [`src/csv.ts`](src/csv.ts) (and the Go port) by
 [`embed-grammar.js`](embed-grammar.js) during `npm run build`.
 
-The installed grammar as a railroad/syntax diagram, generated from the live
-grammar with [`@tabnas/railroad`](https://github.com/tabnas/railroad):
+The live grammar as a railroad/syntax diagram, generated with
+[`@tabnas/railroad`](https://github.com/tabnas/railroad):
 
 ![csv grammar railroad diagram](doc/grammar.svg)
 
