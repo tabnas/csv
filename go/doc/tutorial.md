@@ -18,13 +18,13 @@ go get github.com/tabnas/csv/go
 ```
 
 The module path is `github.com/tabnas/csv/go` and is normally imported
-with the alias `csv`. It depends on `github.com/tabnas/jsonic/go` for
+with the alias `tabnascsv`. It depends on `github.com/tabnas/jsonic/go` for
 the underlying parser.
 
 ```go
 import (
-    csv "github.com/tabnas/csv/go"
-    jsonic "github.com/tabnas/jsonic/go"
+    tabnascsv "github.com/tabnas/csv/go"
+    tabnasjsonic "github.com/tabnas/jsonic/go"
 )
 ```
 
@@ -32,14 +32,14 @@ A configured parser is one Jsonic instance with the CSV plugin
 registered:
 
 ```go
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults)
+j := tabnasjsonic.Make()
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults)
 
 result, err := j.Parse("a,b\n1,2")
 ```
 
 `UseDefaults` merges any extra `map[string]any` arguments on top of
-`csv.Defaults`, so you only specify what differs from the default.
+`tabnascsv.Defaults`, so you only specify what differs from the default.
 
 ## 2. Parse a two-line CSV
 
@@ -49,13 +49,13 @@ package main
 import (
     "fmt"
 
-    csv "github.com/tabnas/csv/go"
-    jsonic "github.com/tabnas/jsonic/go"
+    tabnascsv "github.com/tabnas/csv/go"
+    tabnasjsonic "github.com/tabnas/jsonic/go"
 )
 
 func main() {
-    j := jsonic.Make()
-    j.UseDefaults(csv.Csv, csv.Defaults)
+    j := tabnasjsonic.Make()
+    j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults)
 
     result, err := j.Parse("name,age\nAlice,30\nBob,25")
     if err != nil {
@@ -82,8 +82,8 @@ Strict mode treats every cell as raw text. Enable `number` (and
 optionally `value` for the literals `true`, `false`, `null`):
 
 ```go
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j := tabnasjsonic.Make()
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "number": true,
     "value":  true,
 })
@@ -107,8 +107,8 @@ field in `"` to include commas, newlines, or quotes; double a quote
 (`""`) to escape it.
 
 ```go
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults)
+j := tabnasjsonic.Make()
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults)
 
 src := `name,bio
 Alice,"Likes ""cats"" and dogs"
@@ -132,8 +132,8 @@ callback. The plugin emits one event per record and the top-level
 result is `[]any{}`.
 
 ```go
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j := tabnasjsonic.Make()
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "stream": func(what string, payload any) {
         if what == "record" {
             fmt.Println("row:", payload)

@@ -8,8 +8,8 @@ signatures and defaults, see the [reference](reference.md).
 All examples build on a Jsonic instance:
 
 ```go
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults, /* overrides */)
+j := tabnasjsonic.Make()
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, /* overrides */)
 result, err := j.Parse(input)
 ```
 
@@ -20,7 +20,7 @@ Set `object: false` to receive each record as a plain `[]any`. With
 field tracking and not emitted:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{"object": false})
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{"object": false})
 
 result, _ := j.Parse("a,b,c\n1,2,3\n4,5,6")
 // [[1 2 3] [4 5 6]]
@@ -34,7 +34,7 @@ Set `field.separation`. Tab, pipe, or any other string — including
 multi-character strings such as `"~~"`:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "field": map[string]any{"separation": "\t"},
 })
 
@@ -48,7 +48,7 @@ By default a record ends at `\n`, `\r\n`, or `\r`. Override with
 `record.separators`:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "record": map[string]any{"separators": "%"},
 })
 
@@ -63,7 +63,7 @@ If your CSV has no header, set `header: false`. With the default
 `field~1`, …):
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{"header": false})
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{"header": false})
 
 result, _ := j.Parse("1,2,3")
 // [{field~0: 1, field~1: 2, field~2: 3}]
@@ -75,7 +75,7 @@ When the file has no header but you still want named fields, set
 `header: false` and pass `field.names`:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "header": false,
     "field":  map[string]any{"names": []string{"x", "y", "z"}},
 })
@@ -90,7 +90,7 @@ plain `[]any` in that case.
 ## Trim surrounding whitespace from fields
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{"trim": true})
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{"trim": true})
 
 result, _ := j.Parse("a,b\n  hello  ,  world  ")
 // [{a: hello, b: world}]
@@ -103,7 +103,7 @@ Internal whitespace is preserved.
 Enable `comment` to strip lines starting with `#`:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{"comment": true})
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{"comment": true})
 
 result, _ := j.Parse("a,b\n# this row is ignored\n1,2")
 // [{a: 1, b: 2}]
@@ -116,7 +116,7 @@ A `#` *inside* a field is left alone unless preceded by whitespace.
 Blank lines are skipped by default. To keep them:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "record": map[string]any{"empty": true},
 })
 
@@ -130,7 +130,7 @@ Use `field.empty` to set the placeholder for missing cells. Any value
 works — string, `nil`, bool, number:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "field": map[string]any{"empty": nil},
 })
 
@@ -144,7 +144,7 @@ result, _ := j.Parse("a,b,c\n1,,3")
 header's:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "field": map[string]any{"exact": true},
 })
 
@@ -162,7 +162,7 @@ In strict mode, `[1,2]` and `{x:1}` are just text. Switch to non-strict
 and jsonic re-engages — you get the parsed value back as a Go value:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{"strict": false})
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{"strict": false})
 
 result, _ := j.Parse("a,b,c\ntrue,[1,2],{x:1}")
 // [{a: true, b: [1 2], c: {x: 1}}]
@@ -174,7 +174,7 @@ by default. Numbers come back as `float64`.
 ## Use a different quote character
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "object": false,
     "string": map[string]any{"quote": "'"},
 })
@@ -190,7 +190,7 @@ events. Errors are sent to the callback rather than returned from
 `Parse`:
 
 ```go
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
     "object": false,
     "stream": func(what string, payload any) {
         switch what {
@@ -211,8 +211,8 @@ The configured Jsonic instance is reusable — there is no per-call setup
 cost beyond the parse itself:
 
 ```go
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults, map[string]any{"number": true})
+j := tabnasjsonic.Make()
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{"number": true})
 
 a, _ := j.Parse("x,y\n1,2")
 b, _ := j.Parse("p,q\n3,4")

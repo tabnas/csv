@@ -8,11 +8,11 @@ background see [concepts](concepts.md).
 ## `Csv` (plugin function)
 
 ```go
-func Csv(j *jsonic.Jsonic, options map[string]any) error
+func Csv(j *tabnasjsonic.Jsonic, options map[string]any) error
 ```
 
 The Jsonic plugin that installs the CSV grammar and options. Register
-with `j.UseDefaults(csv.Csv, csv.Defaults, overrides...)`. The function
+with `j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, overrides...)`. The function
 is idempotent: re-invoking it on the same instance is a no-op.
 
 ## `Defaults` (option map)
