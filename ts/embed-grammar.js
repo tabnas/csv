@@ -6,7 +6,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const GRAMMAR_FILE = path.join(__dirname, 'csv-grammar.jsonic')
+const GRAMMAR_FILE = path.join(__dirname, '..', 'csv-grammar.jsonic')
 const TS_FILE = path.join(__dirname, 'src', 'csv.ts')
 const GO_FILE = path.join(__dirname, '..', 'go', 'csv.go')
 
