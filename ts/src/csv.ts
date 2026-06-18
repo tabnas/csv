@@ -395,29 +395,44 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
   // Rules list, elem, val are modified in code rather than the grammar file,
   // because in non-strict mode the default jsonic alternatives must be preserved
   // to support embedded JSON values like [1,2] and {x:1}.
+  //
+  // Node assembly mirrors the new engine builtins and the passing Go port:
+  // the csv `list` rule allocates its OWN array (the field accumulator) in
+  // its before-open phase. Under the new core, a pushed child rule is seeded
+  // with the parent's node, and jsonic's @list-bo only allocates when
+  // `prev.u.implist` is set — which CSV's record->list path never does. So
+  // without this explicit allocation the parsed fields would be pushed onto
+  // the inherited top-level csv array (the leak the migration exposed).
+  // `elem` then pushes each parsed field into that array and `@record-bc`
+  // reads it off `r.child.node`.
 
-  tn.rule('list', (rs: RuleSpec) => {
-    return rs
-      .open([
-        // If not ignoring empty fields, don't consume LN used to close empty record.
-        { s: [LN], b: 1 },
-      ])
-      // Unconditional fallback to push elem — the default jsonic list rule gates
-      // its elem push on prev.u.implist which CSV's record rule does not set.
-      .open([{ p: 'elem' }], { append: true })
-      .close([
-        // LN ends record
-        { s: [LN], b: 1 },
+  if (strict) {
+    // Strict mode: replace list/elem/val entirely. JSON structural tokens are
+    // disabled, so only the CSV-specific alternates are needed.
+    tn.rule('list', (rs: RuleSpec) => {
+      return rs
+        .clear()
+        .bo((r: Rule) => {
+          // Allocate the per-record field array.
+          r.node = []
+        })
+        .open([
+          // Don't consume the LN that closes an empty record.
+          { s: [LN], b: 1 },
+          { p: 'elem' },
+        ])
+        .close([
+          // LN ends record.
+          { s: [LN], b: 1 },
+          { s: [ZZ] },
+        ])
+    })
 
-        { s: [ZZ] },
-      ])
-  })
-
-  tn.rule('elem', (rs: RuleSpec) => {
-    return rs
-      .open(
-        [
-          // An empty element
+    tn.rule('elem', (rs: RuleSpec) => {
+      return rs
+        .clear()
+        .open([
+          // An empty element before a comma: `,` -> push empty, done.
           {
             s: [CA],
             b: 1,
@@ -426,38 +441,121 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
               r.u.done = true
             },
           },
-        ],
-      )
-
-      .close(
-        [
-          // An empty element at the end of the line
+          { p: 'val' },
+        ])
+        .close([
+          // An empty element at the end of the line: `,\n` / `,<eof>`.
           {
             s: [CA, [LN, ZZ]],
             b: 1,
             a: (r: Rule) => r.node.push(options.field.empty),
           },
-
-          // LN ends record
+          // Next element.
+          { s: [CA], r: 'elem' },
+          // LN ends record.
           { s: [LN], b: 1 },
-        ],
-      )
-  })
+          { s: [ZZ] },
+        ])
+        .bc((r: Rule) => {
+          // Push the parsed field value (unless an open alt already did so).
+          if (true !== r.u.done && undefined !== r.child.node) {
+            r.node.push(r.child.node)
+          }
+        })
+    })
 
-  tn.rule('val', (rs: RuleSpec) => {
-    return rs.open(
-      [
-        // Handle text and space concatentation
+    tn.rule('val', (rs: RuleSpec) => {
+      return rs
+        .clear()
+        .bo((r: Rule) => {
+          // @reset$ the parent-seeded node so an empty value resolves to
+          // undefined (not the inherited field array).
+          r.node = undefined
+        })
+        .open([
+          // Handle text and space concatenation.
+          { s: [VAL, SP], b: 2, p: 'text' },
+          { s: [SP], b: 1, p: 'text' },
+          // A plain value token.
+          { s: [VAL] },
+          // LN ends record.
+          { s: [LN], b: 1 },
+        ])
+        .bc((r: Rule, ctx: Context) => {
+          // Coalesce: a child (text) node wins; else the matched scalar
+          // token; else undefined (implicit empty).
+          if (undefined === r.node) {
+            if (undefined !== r.child.node) {
+              r.node = r.child.node
+            } else if (0 !== r.os) {
+              r.node = r.o0.resolveVal(r, ctx)
+            }
+          }
+        })
+    })
+  } else {
+    // Non-strict mode: prepend CSV alternates so the default jsonic value
+    // alternates (handling [1,2], {x:1}, etc.) remain available.
+    tn.rule('list', (rs: RuleSpec) => {
+      return rs
+        .bo((r: Rule) => {
+          // Allocate the per-record field array (jsonic's @list-bo does not,
+          // since CSV's record->list path sets no prev.u.implist).
+          r.node = []
+        })
+        .open([
+          // Don't consume the LN that closes an empty record.
+          { s: [LN], b: 1 },
+        ])
+        // Append the elem-push fallback after the jsonic defaults.
+        .open([{ p: 'elem' }], { append: true })
+        .close(
+          [
+            // LN ends record.
+            { s: [LN], b: 1 },
+            { s: [ZZ] },
+          ],
+          // Prepend so these win over jsonic's default close alts.
+        )
+    })
+
+    tn.rule('elem', (rs: RuleSpec) => {
+      return rs
+        .open([
+          // An empty element before a comma.
+          {
+            s: [CA],
+            b: 1,
+            a: (r: Rule) => {
+              r.node.push(options.field.empty)
+              r.u.done = true
+            },
+          },
+        ])
+        .close([
+          // An empty element at the end of the line.
+          {
+            s: [CA, [LN, ZZ]],
+            b: 1,
+            a: (r: Rule) => r.node.push(options.field.empty),
+          },
+          // LN ends record.
+          { s: [LN], b: 1 },
+        ])
+    })
+
+    tn.rule('val', (rs: RuleSpec) => {
+      return rs.open([
+        // Handle text and space concatenation.
         { s: [VAL, SP], b: 2, p: 'text' },
         { s: [SP], b: 1, p: 'text' },
-
-        // LN ends record
+        // LN ends record.
         { s: [LN], b: 1 },
-      ],
-    )
-  })
+      ])
+    })
+  }
 
-  // Close is called on final rule - set parent val node
+  // Close is called on final rule - set parent val node.
   tn.rule('text', (rs: RuleSpec) => {
     rs.bc((r: Rule) => {
       r.parent.node = undefined === r.child.node ? r.node : r.child.node
