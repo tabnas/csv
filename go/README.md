@@ -1,6 +1,6 @@
 # @tabnas/csv — Go
 
-A [Jsonic](https://jsonic.senecajs.org) syntax plugin that parses CSV
+A [Jsonic](https://github.com/tabnas/jsonic) syntax plugin that parses CSV
 text into Go values, with support for headers, quoted fields, custom
 delimiters, streaming, and strict/non-strict modes. This is the Go port
 of [`@tabnas/csv`](../ts/); the TypeScript implementation is canonical.

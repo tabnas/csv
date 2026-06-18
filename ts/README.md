@@ -1,6 +1,6 @@
 # @tabnas/csv
 
-A [Jsonic](https://jsonic.senecajs.org) / [Tabnas](https://github.com/tabnas/parser)
+A [Jsonic](https://github.com/tabnas/jsonic) / [Tabnas](https://github.com/tabnas/parser)
 syntax plugin that parses CSV text into objects or arrays, with support
 for headers, quoted fields, custom delimiters, streaming, and
 strict/non-strict modes.

@@ -1,6 +1,6 @@
 # @tabnas/csv
 
-A [Jsonic](https://jsonic.senecajs.org) / [Tabnas](https://github.com/tabnas/parser)
+A [Jsonic](https://github.com/tabnas/jsonic) / [Tabnas](https://github.com/tabnas/parser)
 grammar plugin that parses CSV text into arrays of objects (or arrays
 of arrays), with headers, RFC 4180 quoting, custom field/record
 separators, streaming, and a strict / non-strict mode. Available for
