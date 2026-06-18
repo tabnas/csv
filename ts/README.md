@@ -63,6 +63,11 @@ explanation:
 
 ## Grammar diagram
 
+The grammar is defined in the repo-root
+[`csv-grammar.jsonic`](../csv-grammar.jsonic) and embedded into
+[`src/csv.ts`](src/csv.ts) (and the Go port) by
+[`embed-grammar.js`](embed-grammar.js) during `npm run build`.
+
 The installed grammar as a railroad/syntax diagram, generated from the live
 grammar with [`@tabnas/railroad`](https://github.com/tabnas/railroad):
 
