@@ -21,7 +21,7 @@ escapes). That capability is unique to this plugin.
 ## How it sits on the engine
 
 The plugin does not replace the parser; it reconfigures one. When you
-write `j.UseDefaults(csv.Csv, csv.Defaults)`:
+write `j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults)`:
 
 1. The base relaxed-JSON grammar is already present — the `val`, `map`,
    `list`, `pair`, and `elem` rules and the standard lexer matchers.
@@ -173,10 +173,10 @@ types, and one known error-code gap.
 
 | Aspect | TypeScript | Go |
 |---|---|---|
-| Registration | `new Tabnas().use(jsonic).use(Csv, opts?)` | `j := jsonic.Make(); j.UseDefaults(csv.Csv, csv.Defaults, opts...)` |
-| Plugin signature | `(tn, options) => void` | `func(j *jsonic.Jsonic, options map[string]any) error` |
-| Options | partial `CsvOptions` object | `map[string]any` merged over `csv.Defaults` |
-| Defaults | attached as `Csv.defaults` | exported as `csv.Defaults`, passed explicitly |
+| Registration | `new Tabnas().use(jsonic).use(Csv, opts?)` | `j := tabnasjsonic.Make(); j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, opts...)` |
+| Plugin signature | `(tn, options) => void` | `func(j *tabnasjsonic.Jsonic, options map[string]any) error` |
+| Options | partial `CsvOptions` object | `map[string]any` merged over `tabnascsv.Defaults` |
+| Defaults | attached as `Csv.defaults` | exported as `tabnascsv.Defaults`, passed explicitly |
 | Parse call | `parse.parse(src)` returns the value | `j.Parse(src)` returns `(any, error)` |
 | Errors | thrown as exceptions | returned as `error` (never panics) |
 | Stream callback | `(what: string, payload?) => void` | `func(what string, payload any)` |

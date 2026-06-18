@@ -37,12 +37,12 @@ parse.parse('name,age\nAlice,30\nBob,25')
 
 ```go
 import (
-    csv "github.com/tabnas/csv/go"
-    jsonic "github.com/tabnas/jsonic/go"
+    tabnascsv "github.com/tabnas/csv/go"
+    tabnasjsonic "github.com/tabnas/jsonic/go"
 )
 
-j := jsonic.Make()
-j.UseDefaults(csv.Csv, csv.Defaults)
+j := tabnasjsonic.Make()
+j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults)
 
 result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 // [map[name:Alice age:30] map[name:Bob age:25]]
