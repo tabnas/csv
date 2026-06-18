@@ -1,6 +1,6 @@
 {
   "name": "@tabnas/csv",
-  "version": "0.11.0",
+  "version": "0.2.0",
   "description": "This plugin allows the [Jsonic](https://github.com/tabnas/jsonic) JSON parser to support csv syntax.",
   "main": "dist/csv.js",
   "type": "commonjs",
@@ -48,8 +48,8 @@
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "@tabnas/jsonic": ">=2",
-    "@tabnas/parser": ">=2"
+    "@tabnas/jsonic": "^0.2.0",
+    "@tabnas/parser": "^0.2.0"
   },
   "engines": {
     "node": ">=24"
