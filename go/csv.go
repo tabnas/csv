@@ -495,7 +495,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 								r.Parent.Node = r.Node
 							}
 						}
-						r.U["done"] = true
+						r.EnsureU()["done"] = true
 					})},
 				&jsonic.AltSpec{P: "val"},
 			)
@@ -573,7 +573,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 							r.Parent.Node = r.Node
 						}
 					}
-					r.U["done"] = true
+					r.EnsureU()["done"] = true
 				}),
 			})
 			rs.PrependClose(
