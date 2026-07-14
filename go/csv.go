@@ -112,7 +112,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		if stringOpts["csv"] != false {
 			j.SetOptions(jsonic.Options{Lex: &jsonic.LexOptions{
 				Match: map[string]*jsonic.MatchSpec{
-					"stringcsv": {Order: 1e5, Make: buildCsvStringMatcher(stringOpts)},
+					"stringcsv": {Order: 1e5, Make: BuildCsvStringMatcher(stringOpts)},
 				},
 			}})
 		}
@@ -122,7 +122,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		if stringOpts["csv"] == true {
 			j.SetOptions(jsonic.Options{Lex: &jsonic.LexOptions{
 				Match: map[string]*jsonic.MatchSpec{
-					"stringcsv": {Order: 1e5, Make: buildCsvStringMatcher(stringOpts)},
+					"stringcsv": {Order: 1e5, Make: BuildCsvStringMatcher(stringOpts)},
 				},
 			}})
 		}
@@ -602,10 +602,11 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	return nil
 }
 
-// Custom CSV String matcher factory.
-// Handles "a""b" -> a"b quoting.
-// Matches TS: buildCsvStringMatcher(options) returns make(cfg, opts) => matcher(lex).
-func buildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
+// BuildCsvStringMatcher is a custom CSV string matcher factory.
+// It handles "a""b" -> a"b quoting.
+// It mirrors the TS export `buildCsvStringMatcher(options)`, which
+// returns make(cfg, opts) => matcher(lex).
+func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 	quote := toString(stringOpts["quote"])
 	return func(cfg *jsonic.LexConfig, opts *jsonic.Options) jsonic.LexMatcher {
 		return func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
