@@ -1,5 +1,12 @@
 # @tabnas/csv
 
+<!-- tabnas-badges -->
+[![npm](https://tabnas.github.io/status/badges/csv-npm.svg)](https://www.npmjs.com/package/@tabnas/csv)
+[![CI](https://github.com/tabnas/csv/actions/workflows/ci.yml/badge.svg)](https://github.com/tabnas/csv/actions/workflows/ci.yml)
+[![go](https://tabnas.github.io/status/badges/csv-go.svg)](https://pkg.go.dev/github.com/tabnas/csv/go)
+[![tabnas standard](https://tabnas.github.io/status/badges/csv-standard.svg)](https://tabnas.github.io/status/)
+<!-- /tabnas-badges -->
+
 A [Jsonic](https://github.com/tabnas/jsonic) / [Tabnas](https://github.com/tabnas/parser)
 grammar plugin that parses CSV text into arrays of objects (or arrays
 of arrays), with headers, RFC 4180 quoting, custom field/record
