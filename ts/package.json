@@ -1,6 +1,6 @@
 {
   "name": "@tabnas/csv",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "This plugin allows the [Jsonic](https://github.com/tabnas/jsonic) JSON parser to support csv syntax.",
   "main": "dist/csv.js",
   "type": "commonjs",
@@ -17,7 +17,8 @@
   "author": "Richard Rodger (http://richardrodger.com)",
   "repository": {
     "type": "git",
-    "url": "git://github.com/tabnas/csv.git"
+    "url": "git://github.com/tabnas/csv.git",
+    "directory": "ts"
   },
   "scripts": {
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
