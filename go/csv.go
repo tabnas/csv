@@ -728,21 +728,24 @@ func parseGrammarText(text string, refs map[jsonic.FuncRef]any) (*jsonic.Grammar
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse grammar text: %w", err)
 	}
-	parsedMap, ok := parsed.(map[string]any)
+	parsedMap, ok := asStringMap(parsed)
 	if !ok {
 		return nil, fmt.Errorf("grammar text did not parse to a map")
 	}
 	gs := &jsonic.GrammarSpec{Ref: refs}
-	if optionsMap, ok := parsedMap["options"].(map[string]any); ok {
-		gs.OptionsMap = optionsMap
+	if optionsMap, ok := asStringMap(parsedMap["options"]); ok {
+		// The jsonic engine's MapToOptions / ResolveFuncRefs consume
+		// OptionsMap and its nested objects as plain map[string]any, so
+		// deeply convert any nested *OrderedMap before handing it over.
+		gs.OptionsMap = toPlainMap(optionsMap)
 	}
-	ruleMap, ok := parsedMap["rule"].(map[string]any)
+	ruleMap, ok := asStringMap(parsedMap["rule"])
 	if !ok {
 		return gs, nil
 	}
 	gs.Rule = make(map[string]*jsonic.GrammarRuleSpec, len(ruleMap))
 	for name, rDef := range ruleMap {
-		rd, ok := rDef.(map[string]any)
+		rd, ok := asStringMap(rDef)
 		if !ok {
 			continue
 		}
@@ -765,7 +768,7 @@ func buildGrammarAlts(def any) []*jsonic.GrammarAltSpec {
 	}
 	alts := make([]*jsonic.GrammarAltSpec, 0, len(arr))
 	for _, item := range arr {
-		m, ok := item.(map[string]any)
+		m, ok := asStringMap(item)
 		if !ok {
 			alts = append(alts, &jsonic.GrammarAltSpec{})
 			continue
@@ -804,11 +807,13 @@ func buildGrammarAlts(def any) []*jsonic.GrammarAltSpec {
 			switch cv := c.(type) {
 			case string:
 				ga.C = cv
-			case map[string]any:
-				ga.C = cv
+			default:
+				if cm, ok := asStringMap(cv); ok {
+					ga.C = toPlainMap(cm)
+				}
 			}
 		}
-		if n, ok := m["n"].(map[string]any); ok {
+		if n, ok := asStringMap(m["n"]); ok {
 			ga.N = make(map[string]int, len(n))
 			for k, v := range n {
 				if nv, ok := v.(float64); ok {
@@ -836,6 +841,68 @@ func tokenStr(t *jsonic.Token) string {
 		}
 	}
 	return t.Src
+}
+
+// asStringMap returns the underlying key→value map for a parsed object,
+// which may be a *jsonic.OrderedMap (the insertion-ordered parse result) or
+// a plain map[string]any. Grammar consumers look values up by name and do
+// not depend on key order, so exposing the underlying map is sufficient.
+func asStringMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case *jsonic.OrderedMap:
+		return m.Vals, true
+	case jsonic.OrderedMap:
+		return m.Vals, true
+	case map[string]any:
+		return m, true
+	}
+	return nil, false
+}
+
+// toPlain recursively converts any *jsonic.OrderedMap nodes in a parsed
+// value tree into plain map[string]any (dropping key order). The jsonic
+// engine's grammar-consuming helpers (MapToOptions, ResolveFuncRefs) only
+// recurse through plain maps and slices, so grammar config must be plainified
+// before it is handed back to the engine.
+func toPlain(v any) any {
+	switch val := v.(type) {
+	case *jsonic.OrderedMap:
+		out := make(map[string]any, len(val.Keys))
+		for _, k := range val.Keys {
+			out[k] = toPlain(val.Vals[k])
+		}
+		return out
+	case jsonic.OrderedMap:
+		out := make(map[string]any, len(val.Keys))
+		for _, k := range val.Keys {
+			out[k] = toPlain(val.Vals[k])
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, item := range val {
+			out[k] = toPlain(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, item := range val {
+			out[i] = toPlain(item)
+		}
+		return out
+	default:
+		return val
+	}
+}
+
+// toPlainMap deep-converts a map that may hold nested *jsonic.OrderedMap
+// values into a fully-plain map[string]any tree.
+func toPlainMap(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = toPlain(v)
+	}
+	return out
 }
 
 func toBool(v any) bool {

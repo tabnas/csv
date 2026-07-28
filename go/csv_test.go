@@ -521,7 +521,9 @@ func TestUnstrict(t *testing.T) {
 	if !reflect.DeepEqual(m2["b"], []any{float64(1), float64(2)}) {
 		t.Errorf("unstrict b: expected [1 2], got %#v", m2["b"])
 	}
-	if !reflect.DeepEqual(m2["c"], map[string]any{"x": float64(1)}) {
+	// Embedded objects arrive as an insertion-ordered *OrderedMap; strip
+	// the wrapper (value comparison, order-agnostic).
+	if !reflect.DeepEqual(normalizeValue(m2["c"]), map[string]any{"x": float64(1)}) {
 		t.Errorf("unstrict c: expected {x:1}, got %#v", m2["c"])
 	}
 
@@ -536,7 +538,7 @@ func TestUnstrict(t *testing.T) {
 	}
 	row0 := toMap(r3[0])
 	wantC0 := map[string]any{"x": map[string]any{"y": `q"w`}}
-	if !reflect.DeepEqual(row0["c"], wantC0) {
+	if !reflect.DeepEqual(normalizeValue(row0["c"]), wantC0) {
 		t.Errorf("unstrict full row0.c: expected %v, got %v", wantC0, row0["c"])
 	}
 	row1 := toMap(r3[1])
@@ -708,6 +710,15 @@ func normalizeResult(result []any) []any {
 
 func normalizeValue(v any) any {
 	switch val := v.(type) {
+	case *jsonic.OrderedMap:
+		// Parsed (embedded JSON) objects are now insertion-ordered
+		// *OrderedMap wrappers; strip to a plain map for value comparison
+		// (order is intentionally dropped so reflect.DeepEqual matches).
+		m := make(map[string]any, len(val.Keys))
+		for k, v := range val.Vals {
+			m[k] = normalizeValue(v)
+		}
+		return m
 	case map[string]any:
 		m := make(map[string]any)
 		for k, v := range val {
