@@ -16,13 +16,16 @@
 {
   options: rule: { start: csv }
   options: lex: { emptyResult: [] }
+  # Placeholders are {braces}: the engine's error injector (strinject in
+  # @tabnas/parser) substitutes {name} from the details object passed to
+  # token.bad(). A $name is left in the message verbatim.
   options: error: {
-    csv_extra_field: 'unexpected extra field value: $fsrc'
+    csv_extra_field: 'unexpected extra field value: {fsrc}'
     csv_missing_field: 'missing field'
   }
   options: hint: {
-    csv_extra_field: 'Row $row has too many fields (the first of which is: $fsrc). Only $len\nfields per row are expected.'
-    csv_missing_field: 'Row $row has too few fields. $len fields per row are expected.'
+    csv_extra_field: 'Row {row} has too many fields (the first of which is: {fsrc}). Only {len}\nfields per row are expected.'
+    csv_missing_field: 'Row {row} has too few fields. {len} fields per row are expected.'
   }
 
   rule: csv: open: [
