@@ -396,4 +396,40 @@ true,[1,2],{x:{y:"q\\"w"}}
       }
     }
   })
+
+  test('field-exact error messages interpolate their placeholders', () => {
+    // The error/hint templates use {braces}; the engine's injector fills
+    // them from the details passed to token.bad(). Both halves have to be
+    // right — a $name template, or a bad() with no details, leaves the
+    // placeholder in the text the user is shown.
+    const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '')
+    const parse = (src: string) =>
+      new Tabnas().use(jsonic).use(Csv, { field: { exact: true } }).parse(src)
+
+    const extra = (() => {
+      try { parse('a,b\n1,2,3'); return '' } catch (e: any) { return plain(e.message) }
+    })()
+    assert.match(extra, /unexpected extra field value: 3/)
+    assert.match(extra, /Row 2 has too many fields \(the first of which is: 3\)/)
+    assert.match(extra, /Only 2/)
+
+    const missing = (() => {
+      try { parse('a,b\n1'); return '' } catch (e: any) { return plain(e.message) }
+    })()
+    assert.match(missing, /Row 2 has too few fields\. 2 fields per row are expected\./)
+
+    // Row counts from 1 and includes the header, so the second data row
+    // reports as row 3 — the line number an editor would show.
+    const later = (() => {
+      try { parse('a,b\n1,2\n3,4,5'); return '' } catch (e: any) { return plain(e.message) }
+    })()
+    assert.match(later, /Row 3 has too many fields/)
+
+    // No un-substituted placeholders survive, in either syntax.
+    for (const msg of [extra, missing, later]) {
+      assert.equal(/\$(fsrc|row|len)\b/.test(msg), false, 'no $name left: ' + msg)
+      assert.equal(/\{(fsrc|row|len)\}/.test(msg), false, 'no {name} left: ' + msg)
+    }
+  })
+
 })

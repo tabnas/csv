@@ -62,13 +62,16 @@ const grammarText = `
 {
   options: rule: { start: csv }
   options: lex: { emptyResult: [] }
+  # Placeholders are {braces}: the engine's error injector (strinject in
+  # @tabnas/parser) substitutes {name} from the details object passed to
+  # token.bad(). A $name is left in the message verbatim.
   options: error: {
-    csv_extra_field: 'unexpected extra field value: $fsrc'
+    csv_extra_field: 'unexpected extra field value: {fsrc}'
     csv_missing_field: 'missing field'
   }
   options: hint: {
-    csv_extra_field: 'Row $row has too many fields (the first of which is: $fsrc). Only $len\\nfields per row are expected.'
-    csv_missing_field: 'Row $row has too few fields. $len fields per row are expected.'
+    csv_extra_field: 'Row {row} has too many fields (the first of which is: {fsrc}). Only {len}\\nfields per row are expected.'
+    csv_missing_field: 'Row {row} has too few fields. {len} fields per row are expected.'
   }
 
   rule: csv: open: [
@@ -284,10 +287,20 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
           if (fields) {
             if (options.field.exact) {
               if (record.length !== fields.length) {
+                // The messages interpolate {row}, {len} and {fsrc}, so the
+                // details have to be supplied — without them the engine
+                // leaves the placeholders in the text it shows the user.
+                // `row` counts from 1 and includes the header line, so it
+                // matches the line number a spreadsheet or editor reports.
                 return ctx.t0.bad(
                   record.length > fields.length
                     ? 'csv_extra_field'
                     : 'csv_missing_field',
+                  {
+                    row: (ctx.u.recordI ?? 0) + 1,
+                    len: fields.length,
+                    fsrc: record[fields.length],
+                  },
                 )
               }
             }
