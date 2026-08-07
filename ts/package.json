@@ -21,6 +21,8 @@
     "directory": "ts"
   },
   "scripts": {
+    "fetch-suites": "bash ../scripts/fetch-csv-suites.sh",
+    "pretest": "npm run fetch-suites",
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
     "test-some": "node --enable-source-maps --test-name-pattern=\"$npm_config_pattern\" --test \"dist-test/*.test.js\"",
     "test-watch": "node --test --watch dist-test/csv.test.js",
@@ -49,7 +51,6 @@
     "@tabnas/parser": "*",
     "@tabnas/railroad": "*",
     "@types/node": "^25.6.0",
-    "csv-spectrum": "^2.0.0",
     "typescript": "^6.0.3"
   },
   "peerDependencies": {

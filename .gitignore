@@ -33,3 +33,7 @@ package-lock.json
 yarn.lock
 
 
+
+# Third-party conformance corpora. Fetched at pinned commits by
+# scripts/fetch-csv-suites.sh. NEVER COMMIT A THIRD-PARTY TEST CORPUS.
+test/suites/

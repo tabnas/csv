@@ -1,0 +1,89 @@
+package tabnascsv
+
+// Phase-1 measuring probe, NOT part of the test suite. It is copied into go/,
+// run, and removed by scripts/probe-sweep-go.sh. It is deliberately not a
+// committed _test.go file: it asserts nothing, and an assert-nothing test in
+// the live suite is precisely the defect class this work exists to remove.
+//
+// It writes the same JSON shape as scripts/probe-sweep.mjs so the two can be
+// diffed:  node scripts/probe-sweep.mjs --compare ts-sweep.json go-sweep.json
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"regexp"
+	"testing"
+
+	jsonic "github.com/tabnas/jsonic/go"
+)
+
+// Go surfaces the whole rendered error; TS surfaces e.code. Reduce Go's to the
+// bare code so the two sides are comparable.
+var errCodeRe = regexp.MustCompile(`\[jsonic/([a-z_]+)\]`)
+
+func probeErrCode(err error) string {
+	if m := errCodeRe.FindStringSubmatch(err.Error()); m != nil {
+		return m[1]
+	}
+	return err.Error()
+}
+
+type sweepRow struct {
+	Input string `json:"input"`
+	Stack string `json:"stack"`
+	Alone string `json:"alone"`
+}
+
+// Must match ALPHABET/LENGTH in scripts/probe-sweep.mjs.
+var probeAlphabet = []string{"a", ",", "\"", "\n", "'", "`", " "}
+
+const probeLength = 4
+
+func probeEnumerate(alphabet []string, n int) []string {
+	if n == 0 {
+		return []string{""}
+	}
+	rest := probeEnumerate(alphabet, n-1)
+	out := make([]string, 0, len(alphabet)*len(rest))
+	for _, h := range alphabet {
+		for _, r := range rest {
+			out = append(out, h+r)
+		}
+	}
+	return out
+}
+
+func probeClassify(src string) string {
+	j := jsonic.Make()
+	j.UseDefaults(Csv, Defaults)
+	res, err := j.Parse(src)
+	if err != nil {
+		return "ERR:" + probeErrCode(err)
+	}
+	b, _ := json.Marshal(res)
+	return "OK:" + string(b)
+}
+
+func TestProbeSweep(t *testing.T) {
+	out := os.Getenv("TABNAS_SWEEP_OUT")
+	if out == "" {
+		t.Fatalf("TABNAS_SWEEP_OUT must be set; run via scripts/probe-sweep-go.sh")
+	}
+
+	inputs := probeEnumerate(probeAlphabet, probeLength)
+	rows := make([]sweepRow, 0, len(inputs))
+	for _, in := range inputs {
+		c := probeClassify(in)
+		rows = append(rows, sweepRow{Input: in, Stack: c, Alone: c})
+	}
+
+	b, err := json.Marshal(rows)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := os.WriteFile(out, b, 0o644); err != nil {
+		t.Fatalf("write %s: %v", out, err)
+	}
+	fmt.Fprintf(os.Stderr, "go sweep: %d inputs -> %s\n", len(rows), out)
+}

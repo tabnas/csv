@@ -5,13 +5,9 @@ import assert from 'node:assert'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import Util from 'util'
-
 import { Tabnas } from '@tabnas/parser'
 import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '../dist/csv'
-
-const Spectrum = require('csv-spectrum')
 
 const fixturesDir = join(__dirname, '..', '..', 'test', 'fixtures')
 const manifest = JSON.parse(
@@ -336,25 +332,14 @@ true,[1,2],{x:{y:"q\\"w"}}
     assert.throws(() => j.parse('a\n{x:1}y'), /unexpected/)
   })
 
-  test('spectrum', async () => {
-    const j = new Tabnas().use(jsonic).use(Csv)
-    const tests = await Util.promisify(Spectrum)()
-    for (let i = 0; i < tests.length; i++) {
-      let test = tests[i]
-      let name = test.name
-      let json = JSON.parse(test.json.toString())
-      let csv = test.csv.toString()
-      let res = j.parse(csv)
-      let testname = name + ' ' + (i + 1) + '/' + tests.length
-
-      // Broken test, reenable when fixed
-      if (5 === i) {
-        continue
-      }
-
-      assert.deepEqual({ [testname]: res }, { [testname]: json })
-    }
-  })
+  // NOTE: the csv-spectrum corpus used to be run from here, off the
+  // `csv-spectrum` npm devDependency (an unpinned ^2.0.0), with an
+  // index-based `if (5 === i) continue` labelled "Broken test, reenable when
+  // fixed" that named neither the case nor the reason and would have slid
+  // onto a different case had the corpus changed. It now lives in
+  // ts/test/conformance.test.ts, driven by the corpus fetched at a PINNED
+  // commit by scripts/fetch-csv-suites.sh, with all 12 documents accounted
+  // for and none silently skipped.
 
   test('fixtures', async () => {
     const csv = new Tabnas().use(jsonic).use(Csv)
@@ -376,12 +361,28 @@ true,[1,2],{x:{y:"q\\"w"}}
       const raw = readFileSync(join(fixturesDir, csvFile + '.csv'), 'utf8')
 
       if (entry.err) {
+        // The assert.fail() used to sit INSIDE the try, so the catch swallowed
+        // its AssertionError and re-reported it as a bogus code mismatch
+        // (`e.code` of an AssertionError is 'ERR_ASSERTION'), hiding the real
+        // "this must-fail fixture parsed cleanly" message.
+        let thrown: any = undefined
+        let parsed = false
         try {
           parser.parse(raw)
-          assert.fail('Expected error ' + entry.err + ' for fixture: ' + name)
+          parsed = true
         } catch (e: any) {
-          assert.deepEqual(entry.err, e.code)
+          thrown = e
         }
+        assert.equal(
+          parsed,
+          false,
+          'Expected error ' + entry.err + ' for fixture: ' + name,
+        )
+        assert.equal(
+          thrown.code,
+          entry.err,
+          'Wrong error code for fixture: ' + name + ' — ' + thrown.message,
+        )
       } else {
         try {
           const expected = JSON.parse(

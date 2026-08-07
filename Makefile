@@ -5,13 +5,21 @@
 # repo-set go.work + node_modules symlinks (admin/scripts/link.sh).
 
 .PHONY: all build test clean build-ts build-go test-ts test-go \
-        clean-ts clean-go publish-ts publish-go tags-go reset
+        clean-ts clean-go publish-ts publish-go tags-go reset fetch-suites
 
 all: build test
 
 build: build-ts build-go
 
-test: test-ts test-go
+test: fetch-suites test-ts test-go
+
+# Third-party conformance corpora (csv-spectrum, golang/go encoding/csv).
+# Fetched at pinned commits into the gitignored test/suites/; NEVER committed.
+# Both test suites also invoke this themselves (ts via the `pretest` npm hook,
+# go via ensureCorpus in go/conformance_test.go) and FAIL LOUDLY rather than
+# skipping if the corpus is absent, so the corpus cannot silently go missing.
+fetch-suites:
+	./scripts/fetch-csv-suites.sh
 
 clean: clean-ts clean-go
 

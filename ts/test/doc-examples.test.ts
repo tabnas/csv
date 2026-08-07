@@ -185,8 +185,27 @@ describe('doc-examples', () => {
     })
   }
 
-  it('found at least one tested example (sanity)', () => {
-    // Not a hard failure if a repo has no `// =>` examples yet.
-    assert.ok(testable >= 0, `tested ${testable} doc example block(s)`)
+  it('the doc corpus has not silently shrunk', () => {
+    // This assertion used to read `assert.ok(testable >= 0, ...)`, which is
+    // true for every possible value: the harness could stop finding docs
+    // altogether — a renamed directory, a broken glob, a doc rewrite that
+    // dropped every `// =>` — and stay green while testing nothing.
+    //
+    // Pinned to the count observed on 2026-08-07. Raise it when you add
+    // examples; never lower it to get green.
+    const FLOOR = 18
+    assert.ok(
+      files.length > 0,
+      'found no markdown files at all under ' + REPO + ' — the doc glob is broken',
+    )
+    assert.ok(
+      files.some((f) => path.basename(f) === 'README.md'),
+      'README.md was not collected — the doc glob is broken',
+    )
+    assert.ok(
+      testable >= FLOOR,
+      `only ${testable} doc example block(s) are asserted, expected at least ` +
+        `${FLOOR}. Docs or the extractor regressed — do NOT lower the floor.`,
+    )
   })
 })
