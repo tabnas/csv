@@ -2,7 +2,6 @@ package tabnascsv
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -174,24 +173,57 @@ func TestPluginEmpty(t *testing.T) {
 	}
 }
 
+// TestUsePlugin previously t.Logf'd the error, assigned the result to `_` and
+// asserted NOTHING, so it could never fail. It now pins what Use(Csv, nil)
+// actually does — which is NOT what the TypeScript `use(Csv)` does, and that
+// divergence is exactly what the empty test was hiding.
+//
+// TS:  new Tabnas().use(jsonic).use(Csv).parse("a,b\n1,2")
+//        => [{a:"1", b:"2"}]                 header consumed, strict, strings
+// Go:  jsonic.Make(); j.Use(Csv, nil)
+//        => [["a","b"],[1,2]]                header kept, arrays, numbers
+//
+// Only j.UseDefaults(Csv, Defaults) reproduces the TS behaviour, because
+// Use(..., nil) never applies the plugin's default option set. This is a
+// characterisation test of a real defect, not an endorsement of it.
 func TestUsePlugin(t *testing.T) {
 	j := jsonic.Make()
 	j.Use(Csv, nil)
 
 	result, err := j.Parse("a,b\n1,2")
 	if err != nil {
-		t.Logf("Plugin parse returned error (expected with basic plugin): %v", err)
+		t.Fatalf("Use(Csv, nil) parse failed: %v", err)
 	}
-	_ = result
+
+	got, _ := json.Marshal(result)
+	const bare = `[["a","b"],[1,2]]`
+	if string(got) != bare {
+		t.Errorf("Use(Csv, nil): expected the (defective) bare-plugin result %s, got %s\n"+
+			"  If this now matches UseDefaults, the defect is fixed — update this test "+
+			"and the AGENTS.md note.", bare, got)
+	}
+
+	// The documented Go stack, for contrast. This is the TS-equivalent result.
+	withDefaults := jsonic.Make()
+	withDefaults.UseDefaults(Csv, Defaults)
+	res2, err := withDefaults.Parse("a,b\n1,2")
+	if err != nil {
+		t.Fatalf("UseDefaults(Csv, Defaults) parse failed: %v", err)
+	}
+	got2, _ := json.Marshal(res2)
+	const wanted = `[{"a":"1","b":"2"}]`
+	if string(got2) != wanted {
+		t.Errorf("UseDefaults(Csv, Defaults): expected %s (TS parity), got %s", wanted, got2)
+	}
 }
 
 func TestEmptyRecords(t *testing.T) {
-	result, _ := csvParse("a\n1\n\n2\n3\n\n\n4\n")
+	result := mustParse(t, "a\n1\n\n2\n3\n\n\n4\n")
 	assertRecords(t, "empty-ignored", result, []map[string]any{
 		{"a": "1"}, {"a": "2"}, {"a": "3"}, {"a": "4"},
 	})
 
-	result2, _ := csvParse("a\n1\n\n2\n3\n\n\n4\n",
+	result2 := mustParse(t, "a\n1\n\n2\n3\n\n\n4\n",
 		map[string]any{"record": map[string]any{"empty": true}})
 	assertRecords(t, "empty-preserved", result2, []map[string]any{
 		{"a": "1"}, {"a": ""}, {"a": "2"}, {"a": "3"},
@@ -199,18 +231,18 @@ func TestEmptyRecords(t *testing.T) {
 	})
 
 	// Empty input yields no records.
-	if r, _ := csvParse("\n"); len(r) != 0 {
+	if r := mustParse(t, "\n"); len(r) != 0 {
 		t.Errorf("empty-input: expected 0 records, got %v", r)
 	}
 
 	// Leading/trailing blank lines (CRLF) are ignored.
-	result3, _ := csvParse("\r\n\r\na,b\r\nA,B\r\n\r\n")
+	result3 := mustParse(t, "\r\n\r\na,b\r\nA,B\r\n\r\n")
 	assertRecords(t, "empty-edges", result3, []map[string]any{
 		{"a": "A", "b": "B"},
 	})
 
 	// Comment lines are dropped and do not become empty records.
-	result4, _ := csvParse("a#X\n1\n#Y\n2\n3\n\n#Z\n4\n#Q",
+	result4 := mustParse(t, "a#X\n1\n#Y\n2\n3\n\n#Z\n4\n#Q",
 		map[string]any{"comment": true})
 	assertRecords(t, "empty-comments", result4, []map[string]any{
 		{"a": "1"}, {"a": "2"}, {"a": "3"}, {"a": "4"},
@@ -218,7 +250,7 @@ func TestEmptyRecords(t *testing.T) {
 
 	// With record.empty, dropped comment lines still do not become records,
 	// but genuine blank lines do.
-	result5, _ := csvParse("a#X\n1\n#Y\n2\n3\n\n#Z\n4\n#Q",
+	result5 := mustParse(t, "a#X\n1\n#Y\n2\n3\n\n#Z\n4\n#Q",
 		map[string]any{"comment": true, "record": map[string]any{"empty": true}})
 	assertRecords(t, "empty-comments-preserved", result5, []map[string]any{
 		{"a": "1"}, {"a": ""}, {"a": "2"}, {"a": "3"},
@@ -247,19 +279,19 @@ func TestFieldExact(t *testing.T) {
 }
 
 func TestHeader(t *testing.T) {
-	result, _ := csvParse("\na,b\nA,B")
+	result := mustParse(t, "\na,b\nA,B")
 	assertRecords(t, "header-skip-leading", result, []map[string]any{
 		{"a": "A", "b": "B"},
 	})
 
-	result2, _ := csvParse("\na,b\nA,B", map[string]any{"header": false})
+	result2 := mustParse(t, "\na,b\nA,B", map[string]any{"header": false})
 	assertRecords(t, "no-header", result2, []map[string]any{
 		{"field~0": "a", "field~1": "b"},
 		{"field~0": "A", "field~1": "B"},
 	})
 
 	// header:false with object:false yields every row as a slice.
-	resultArr, _ := csvParse("\na,b\nA,B",
+	resultArr := mustParse(t, "\na,b\nA,B",
 		map[string]any{"header": false, "object": false})
 	if !reflect.DeepEqual(resultArr, []any{
 		[]any{"a", "b"}, []any{"A", "B"},
@@ -269,7 +301,7 @@ func TestHeader(t *testing.T) {
 
 	// header:false with explicit field.names yields named objects for
 	// every row, including the one that would otherwise be the header.
-	resultNames, _ := csvParse("\na,b\nA,B", map[string]any{
+	resultNames := mustParse(t, "\na,b\nA,B", map[string]any{
 		"header": false,
 		"field":  map[string]any{"names": []string{"a", "b"}},
 	})
@@ -303,16 +335,16 @@ func TestComma(t *testing.T) {
 	}
 
 	// Leading blank line yields no records.
-	if r, _ := csvParse("\na"); len(r) != 0 {
+	if r := mustParse(t, "\na"); len(r) != 0 {
 		t.Errorf("comma leading-blank: expected 0 records, got %v", r)
 	}
 
 	// object:false variants.
-	ra, _ := csvParse("a\n1,", map[string]any{"object": false})
+	ra := mustParse(t, "a\n1,", map[string]any{"object": false})
 	if !reflect.DeepEqual(ra, []any{[]any{"1", ""}}) {
 		t.Errorf("comma array trailing: got %#v", ra)
 	}
-	rb, _ := csvParse("a,b\n,1,2", map[string]any{"object": false})
+	rb := mustParse(t, "a,b\n,1,2", map[string]any{"object": false})
 	if !reflect.DeepEqual(rb, []any{[]any{"", "1", "2"}}) {
 		t.Errorf("comma array leading: got %#v", rb)
 	}
@@ -353,90 +385,90 @@ func TestDoubleQuotes(t *testing.T) {
 }
 
 func TestTrim(t *testing.T) {
-	r1, _ := csvParse("a\n b")
+	r1 := mustParse(t, "a\n b")
 	assertField(t, "no-trim-leading", r1, "a", " b")
 
-	r2, _ := csvParse("a\nb ")
+	r2 := mustParse(t, "a\nb ")
 	assertField(t, "no-trim-trailing", r2, "a", "b ")
 
-	r3, _ := csvParse("a\n b ")
+	r3 := mustParse(t, "a\n b ")
 	assertField(t, "no-trim-both", r3, "a", " b ")
 
-	r4, _ := csvParse("a\n b", map[string]any{"trim": true})
+	r4 := mustParse(t, "a\n b", map[string]any{"trim": true})
 	assertField(t, "trim-leading", r4, "a", "b")
 
-	r5, _ := csvParse("a\nb ", map[string]any{"trim": true})
+	r5 := mustParse(t, "a\nb ", map[string]any{"trim": true})
 	assertField(t, "trim-trailing", r5, "a", "b")
 
-	r6, _ := csvParse("a\n b c ", map[string]any{"trim": true})
+	r6 := mustParse(t, "a\n b c ", map[string]any{"trim": true})
 	assertField(t, "trim-internal", r6, "a", "b c")
 }
 
 func TestComment(t *testing.T) {
-	r1, _ := csvParse("a\n# b")
+	r1 := mustParse(t, "a\n# b")
 	assertField(t, "no-comment", r1, "a", "# b")
 
-	r2, _ := csvParse("a\n# b", map[string]any{"comment": true})
+	r2 := mustParse(t, "a\n# b", map[string]any{"comment": true})
 	if len(r2) != 0 {
 		t.Errorf("comment-line: expected 0 records, got %d", len(r2))
 	}
 
-	r3, _ := csvParse("a\n b #c", map[string]any{"comment": true})
+	r3 := mustParse(t, "a\n b #c", map[string]any{"comment": true})
 	assertField(t, "comment-inline", r3, "a", " b ")
 
 	// Non-strict mode enables comment (and trim) by default.
-	r4, _ := csvParse("a\n# b", map[string]any{"strict": false})
+	r4 := mustParse(t, "a\n# b", map[string]any{"strict": false})
 	if len(r4) != 0 {
 		t.Errorf("comment-nonstrict: expected 0 records, got %d", len(r4))
 	}
-	r5, _ := csvParse("a\n b ", map[string]any{"strict": false})
+	r5 := mustParse(t, "a\n b ", map[string]any{"strict": false})
 	assertField(t, "comment-nonstrict-trim", r5, "a", "b")
 }
 
 func TestNumber(t *testing.T) {
-	r1, _ := csvParse("a\n1")
+	r1 := mustParse(t, "a\n1")
 	assertField(t, "no-number", r1, "a", "1")
 
-	r2, _ := csvParse("a\n1", map[string]any{"number": true})
+	r2 := mustParse(t, "a\n1", map[string]any{"number": true})
 	m := toMap(r2[0])
 	if m["a"] != float64(1) {
 		t.Errorf("number: expected 1 (float64), got %v (%T)", m["a"], m["a"])
 	}
 
 	// Exponent notation is parsed when number is enabled.
-	r3, _ := csvParse("a\n1e2", map[string]any{"number": true})
+	r3 := mustParse(t, "a\n1e2", map[string]any{"number": true})
 	if toMap(r3[0])["a"] != float64(100) {
 		t.Errorf("number-exp: expected 100, got %v", toMap(r3[0])["a"])
 	}
 
 	// Strict mode keeps numbers as strings unless opted in.
-	r4, _ := csvParse("a\n1e2")
+	r4 := mustParse(t, "a\n1e2")
 	assertField(t, "number-strict-string", r4, "a", "1e2")
 
 	// Non-strict mode coerces numbers by default.
-	r5, _ := csvParse("a\n1e2", map[string]any{"strict": false})
+	r5 := mustParse(t, "a\n1e2", map[string]any{"strict": false})
 	if toMap(r5[0])["a"] != float64(100) {
 		t.Errorf("number-nonstrict: expected 100, got %v", toMap(r5[0])["a"])
 	}
 }
 
 func TestValue(t *testing.T) {
-	r1, _ := csvParse("a\ntrue")
+	r1 := mustParse(t, "a\ntrue")
 	assertField(t, "no-value", r1, "a", "true")
 
-	r2, _ := csvParse("a\ntrue", map[string]any{"value": true})
+	r2 := mustParse(t, "a\ntrue", map[string]any{"value": true})
 	m := toMap(r2[0])
 	if m["a"] != true {
 		t.Errorf("value-true: expected true, got %v (%T)", m["a"], m["a"])
 	}
 
-	r3, _ := csvParse("a\nfalse", map[string]any{"value": true})
+	r3 := mustParse(t, "a\nfalse", map[string]any{"value": true})
 	m3 := toMap(r3[0])
 	if m3["a"] != false {
 		t.Errorf("value-false: expected false, got %v (%T)", m3["a"], m3["a"])
 	}
 
-	r4, _ := csvParse("a\nnull", map[string]any{"value": true})
+	r4 := mustParse(t, "a\nnull", map[string]any{"value": true})
 	m4 := toMap(r4[0])
 	if m4["a"] != nil {
 		t.Errorf("value-null: expected nil, got %v (%T)", m4["a"], m4["a"])
@@ -473,14 +505,14 @@ func TestStream(t *testing.T) {
 }
 
 func TestSeparators(t *testing.T) {
-	result, _ := csvParse("a|b|c\nA|B|C\nAA|BB|CC",
+	result := mustParse(t, "a|b|c\nA|B|C\nAA|BB|CC",
 		map[string]any{"field": map[string]any{"separation": "|"}})
 	assertRecords(t, "pipe", result, []map[string]any{
 		{"a": "A", "b": "B", "c": "C"},
 		{"a": "AA", "b": "BB", "c": "CC"},
 	})
 
-	result2, _ := csvParse("a~~b~~c\nA~~B~~C",
+	result2 := mustParse(t, "a~~b~~c\nA~~B~~C",
 		map[string]any{"field": map[string]any{"separation": "~~"}})
 	assertRecords(t, "multi-char", result2, []map[string]any{
 		{"a": "A", "b": "B", "c": "C"},
@@ -488,7 +520,7 @@ func TestSeparators(t *testing.T) {
 }
 
 func TestRecordSeparators(t *testing.T) {
-	result, _ := csvParse("a,b,c%A,B,C%AA,BB,CC",
+	result := mustParse(t, "a,b,c%A,B,C%AA,BB,CC",
 		map[string]any{"record": map[string]any{"separators": "%"}})
 	assertRecords(t, "record-sep", result, []map[string]any{
 		{"a": "A", "b": "B", "c": "C"},
@@ -555,7 +587,7 @@ func TestUnstrict(t *testing.T) {
 
 func TestEmptyAnyType(t *testing.T) {
 	// nil empty value
-	r1, _ := csvParse("a,b,c\n1,,3",
+	r1 := mustParse(t, "a,b,c\n1,,3",
 		map[string]any{"field": map[string]any{"empty": nil}})
 	m1 := toMap(r1[0])
 	if m1["b"] != nil {
@@ -563,7 +595,7 @@ func TestEmptyAnyType(t *testing.T) {
 	}
 
 	// bool empty value
-	r2, _ := csvParse("a,b\n1,",
+	r2 := mustParse(t, "a,b\n1,",
 		map[string]any{"field": map[string]any{"empty": false}})
 	m2 := toMap(r2[0])
 	if m2["b"] != false {
@@ -571,7 +603,7 @@ func TestEmptyAnyType(t *testing.T) {
 	}
 
 	// numeric empty value
-	r3, _ := csvParse("a,b\n1,",
+	r3 := mustParse(t, "a,b\n1,",
 		map[string]any{"field": map[string]any{"empty": 42}})
 	m3 := toMap(r3[0])
 	if m3["b"] != 42 {
@@ -665,6 +697,30 @@ func parseFixture(src string, pluginOpts map[string]any, jsonicOpts map[string]a
 
 // Helpers
 
+// mustParse parses and fails the test on error.
+//
+// Nearly forty call sites used to read `result, _ := csvParse(...)`, silently
+// discarding the parse error and then asserting against a nil/empty result —
+// which happened to be what several of the expectations wanted, so a parse
+// that blew up could still show green. Errors are now fatal unless a test is
+// deliberately asserting one.
+func mustParse(t *testing.T, src string, opts ...map[string]any) []any {
+	t.Helper()
+	result, err := csvParse(src, opts...)
+	if err != nil {
+		t.Fatalf("unexpected parse error for %q (opts %v): %v", src, opts, err)
+	}
+	return result
+}
+
+// assertRecords compares the WHOLE record, not just the expected keys.
+//
+// It previously iterated only over the expected map's keys, so an extra field
+// the parser invented was invisible, and it compared with
+// fmt.Sprintf("%v", ...), under which "1", 1 and 1.0 are all equal — the exact
+// class of bug that hid a wrong-value defect in the sibling json5 repo.
+// Comparison is now by canonical JSON, which is both type-sensitive and
+// representation independent (map[string]any and OrderedMap normalise alike).
 func assertRecords(t *testing.T, name string, result []any, expected []map[string]any) {
 	t.Helper()
 	if len(result) != len(expected) {
@@ -672,11 +728,26 @@ func assertRecords(t *testing.T, name string, result []any, expected []map[strin
 		return
 	}
 	for i, exp := range expected {
-		m := toMap(result[i])
-		for k, v := range exp {
-			if fmt.Sprintf("%v", m[k]) != fmt.Sprintf("%v", v) {
-				t.Errorf("%s: record %d, field %q: expected %v, got %v", name, i, k, v, m[k])
-			}
+		gotJSON, err := json.Marshal(result[i])
+		if err != nil {
+			t.Errorf("%s: record %d is not JSON-representable: %v", name, i, err)
+			continue
+		}
+		wantJSON, err := json.Marshal(exp)
+		if err != nil {
+			t.Errorf("%s: record %d expectation is not JSON-representable: %v", name, i, err)
+			continue
+		}
+		// json.Marshal sorts map keys, so re-marshal the actual through a
+		// map to make the comparison key-order independent.
+		var gotAny map[string]any
+		if err := json.Unmarshal(gotJSON, &gotAny); err != nil {
+			t.Errorf("%s: record %d is not an object: %s", name, i, gotJSON)
+			continue
+		}
+		gotNorm, _ := json.Marshal(gotAny)
+		if string(gotNorm) != string(wantJSON) {
+			t.Errorf("%s: record %d: expected %s, got %s", name, i, wantJSON, gotNorm)
 		}
 	}
 }
@@ -688,8 +759,12 @@ func assertField(t *testing.T, name string, result []any, key string, expected s
 		return
 	}
 	m := toMap(result[0])
+	if m == nil {
+		t.Errorf("%s: record 0 is not an object: %#v", name, result[0])
+		return
+	}
 	if m[key] != expected {
-		t.Errorf("%s: expected %q=%q, got %q=%q", name, key, expected, key, m[key])
+		t.Errorf("%s: expected %q=%q, got %q=%v", name, key, expected, key, m[key])
 	}
 }
 
