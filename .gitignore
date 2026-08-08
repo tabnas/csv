@@ -32,4 +32,11 @@ dist-test
 package-lock.json
 yarn.lock
 
+# Third-party conformance corpora, fetched at pinned upstream commits by
+# scripts/fetch-csv-suites.sh (run by `npm test` via the pretest hook, and by
+# go/conformance_test.go itself when a corpus is missing).
+# Not vendored: they carry their own licences, and pinning by commit keeps
+# the reported conformance numbers tied to a named upstream revision.
+test/suites/
+
 

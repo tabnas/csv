@@ -2,6 +2,7 @@ package tabnascsv
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -227,17 +228,20 @@ func TestEmptyRecords(t *testing.T) {
 }
 
 // TestFieldExact checks that field.exact halts the parse on field-count
-// mismatches. NOTE: jsonic-go surfaces the error under the generic
-// "unexpected" code rather than csv_extra_field / csv_missing_field (see
-// the note in csv.go and AGENTS.md); this test asserts the parse fails.
+// mismatches, under the same error codes TS raises: csv_extra_field when
+// the row has too many fields, csv_missing_field when it has too few.
 func TestFieldExact(t *testing.T) {
 	if _, err := csvParse("a,b\n1,2,3",
 		map[string]any{"field": map[string]any{"exact": true}}); err == nil {
 		t.Errorf("exact extra: expected error, got none")
+	} else {
+		assertErrCode(t, "exact extra", err, "csv_extra_field")
 	}
 	if _, err := csvParse("a,b\n1",
 		map[string]any{"field": map[string]any{"exact": true}}); err == nil {
 		t.Errorf("exact missing: expected error, got none")
+	} else {
+		assertErrCode(t, "exact missing", err, "csv_missing_field")
 	}
 	// Matching field counts parse cleanly.
 	if _, err := csvParse("a,b\n1,2",
@@ -752,5 +756,20 @@ func normalizeJSON(v any) any {
 		return m
 	default:
 		return v
+	}
+}
+
+// assertErrCode checks that err is a jsonic error carrying the exact
+// `code` given. Codes are part of the public contract and are pinned
+// identically on the TS side, so they are asserted, not just the failure.
+func assertErrCode(t *testing.T, name string, err error, want string) {
+	t.Helper()
+	var je *jsonic.JsonicError
+	if !errors.As(err, &je) {
+		t.Errorf("%s: expected *jsonic.JsonicError, got %T: %v", name, err, err)
+		return
+	}
+	if je.Code != want {
+		t.Errorf("%s: expected code %q, got %q", name, want, je.Code)
 	}
 }

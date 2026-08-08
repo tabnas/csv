@@ -339,21 +339,31 @@ true,[1,2],{x:{y:"q\\"w"}}
   test('spectrum', async () => {
     const j = new Tabnas().use(jsonic).use(Csv)
     const tests = await Util.promisify(Spectrum)()
+    let judged = 0
+
     for (let i = 0; i < tests.length; i++) {
       let test = tests[i]
       let name = test.name
       let json = JSON.parse(test.json.toString())
       let csv = test.csv.toString()
-      let res = j.parse(csv)
       let testname = name + ' ' + (i + 1) + '/' + tests.length
 
-      // Broken test, reenable when fixed
-      if (5 === i) {
-        continue
-      }
+      // `location_coordinates` is inconsistent UPSTREAM — its .json is a bare
+      // object where every other expectation is an array of records, and its
+      // phone number was scrubbed in the .json but not in the .csv, so it
+      // cannot judge any parser. Excluded BY NAME (the old code excluded
+      // `5 === i`, which named neither the case nor the reason and silently
+      // tracked whatever case happened to be sixth). The defect itself, and
+      // what @tabnas/csv does with the document, are asserted in
+      // test/conformance.test.ts — nothing about it goes unchecked.
+      if ('location_coordinates' === name) continue
 
+      judged++
+      let res = j.parse(csv)
       assert.deepEqual({ [testname]: res }, { [testname]: json })
     }
+
+    assert.equal(judged, tests.length - 1, 'every spectrum case must be judged')
   })
 
   test('fixtures', async () => {

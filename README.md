@@ -55,6 +55,24 @@ result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 // [map[name:Alice age:30] map[name:Bob age:25]]
 ```
 
+## Conformance
+
+RFC 4180 quoting (`""` escaping, embedded separators, embedded line breaks)
+inside a deliberately **lenient, PapaParse-compatible** reader — not a strict
+RFC 4180 validator. Verified in both runtimes against two third-party corpora
+at pinned upstream commits:
+
+| Corpus | Result |
+|---|---|
+| [csv-spectrum](https://github.com/max-mapper/csv-spectrum) v2.0.0 | 11/12 by value (1 self-contradictory upstream case) |
+| [Go `encoding/csv`](https://github.com/golang/go/tree/master/src/encoding/csv) `readTests` | 39/55 exact, 16 documented divergences, 13 not applicable |
+
+The divergences are deliberate and individually asserted (a bare `CR` is a
+record separator, stray quotes in an unquoted field are literal text, and so
+on). See [AGENTS.md](AGENTS.md#conformance) for the full table, and
+[`scripts/fetch-csv-suites.sh`](scripts/fetch-csv-suites.sh) to fetch the
+corpora and reproduce the numbers.
+
 ## Documentation
 
 Full documentation follows the [Diátaxis](https://diataxis.fr) four
