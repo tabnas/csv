@@ -258,8 +258,11 @@ go test -v ./...       # unit tests + shared fixtures
 
 The repo root [`Makefile`](Makefile) wraps both: `make build|test` run
 the TS and Go halves, and `make publish-go V=x.y.z` injects `V` into the
-`const Version` in `go/csv.go` and tags `go/vX.Y.Z`.
-The TS package version is tracked in `ts/package.json`.
+`const VERSION` in `go/csv.go` and tags `go/vX.Y.Z`.
+The TS package version is tracked in `ts/package.json`, and is also
+exported as `VERSION` from `ts/src/csv.ts`. Both constants MUST equal
+`ts/package.json` `"version"`: `go/version_test.go` and
+`ts/test/version.test.ts` fail the build if any of the three drift.
 
 Local builds resolve the unpublished siblings via the repo-set
 `go.work` + node_modules symlinks created by `admin/scripts/link.sh`;

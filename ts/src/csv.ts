@@ -15,6 +15,11 @@ import {
 // The jsonic grammar plugin provides the base JSON grammar.
 import { jsonic } from '@tabnas/jsonic'
 
+// VERSION is this package's version. It MUST equal package.json "version":
+// the release orchestrator rewrites both, and test/version.test.ts fails the
+// build if they drift. Mirrors `const VERSION` in go/csv.go.
+const VERSION = '0.4.4'
+
 // See defaults below for commentary.
 type CsvOptions = {
   trim: boolean | null
@@ -705,6 +710,6 @@ Csv.defaults = {
   },
 } as CsvOptions
 
-export { Csv, buildCsvStringMatcher }
+export { Csv, buildCsvStringMatcher, VERSION }
 
 export type { CsvOptions }
