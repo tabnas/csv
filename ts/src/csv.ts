@@ -280,31 +280,34 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
       } else {
         let record: any = r.child.node || []
 
+        // The field-count check is independent of the result SHAPE: it only
+        // needs a known field list (from the header row or `field.names`).
+        // It used to sit inside the `objres` branch, which silently disabled
+        // `field.exact` for every `object: false` parse even when a header
+        // was present — a documented option doing nothing.
+        if (fields && options.field.exact && record.length !== fields.length) {
+          // The messages interpolate {row}, {len} and {fsrc}, so the details
+          // have to be supplied — without them the engine leaves the
+          // placeholders in the text it shows the user. `row` counts from 1
+          // and includes the header line, so it matches the line number a
+          // spreadsheet or editor reports.
+          return ctx.t0.bad(
+            record.length > fields.length
+              ? 'csv_extra_field'
+              : 'csv_missing_field',
+            {
+              row: (ctx.u.recordI ?? 0) + 1,
+              len: fields.length,
+              fsrc: record[fields.length],
+            },
+          )
+        }
+
         if (objres) {
           let obj: Record<string, any> = {}
           let i = 0
 
           if (fields) {
-            if (options.field.exact) {
-              if (record.length !== fields.length) {
-                // The messages interpolate {row}, {len} and {fsrc}, so the
-                // details have to be supplied — without them the engine
-                // leaves the placeholders in the text it shows the user.
-                // `row` counts from 1 and includes the header line, so it
-                // matches the line number a spreadsheet or editor reports.
-                return ctx.t0.bad(
-                  record.length > fields.length
-                    ? 'csv_extra_field'
-                    : 'csv_missing_field',
-                  {
-                    row: (ctx.u.recordI ?? 0) + 1,
-                    len: fields.length,
-                    fsrc: record[fields.length],
-                  },
-                )
-              }
-            }
-
             let fI = 0
             for (; fI < fields.length; fI++) {
               obj[fields[fI]] =
@@ -597,6 +600,15 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
 
         let s: string[] = []
 
+        // Only a quote char that is NOT the first half of an escaped `""`
+        // pair closes the string. Loop exhaustion therefore means the field
+        // ran off the end of the source with its quote still open — which is
+        // how an odd number of quotes (`"""`, `"""""`, …) is detected. The
+        // old terminal test looked at `src[sI - 1] === q`, which cannot tell
+        // a closing quote from the second half of an escape pair, so those
+        // inputs were silently accepted as terminated strings.
+        let closed = false
+
         for (sI; sI < srclen; sI++) {
           cI++
           let c = src[sI]
@@ -609,6 +621,7 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
             if (q === src[sI]) {
               s.push(q)
             } else {
+              closed = true
               break // String finished.
             }
           }
@@ -644,7 +657,7 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
           }
         }
 
-        if (src[sI - 1] !== q || pnt.sI === sI - 1) {
+        if (!closed) {
           pnt.rI = qrI
           return lex.bad('unterminated_string', qI, sI)
         }

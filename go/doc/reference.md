@@ -55,7 +55,7 @@ Nested `field` group:
 | `field.nonameprefix` | `string` | `"field~"` | Prefix used when a record has more fields than names. |
 | `field.empty` | `any` | `""` | Value substituted for an empty field. |
 | `field.names` | `[]string` or `nil` | `nil` | Explicit field names. |
-| `field.exact` | `bool` | `false` | Error on field-count mismatch. |
+| `field.exact` | `bool` | `false` | Error when a record's field count differs from the expected count (the header row, or `field.names` when `header: false`; inert with neither). Applies to both object and array output. |
 
 Nested `record` group:
 
@@ -100,19 +100,18 @@ func(what string, payload any)
 
 ## Errors
 
-`field.exact` violations halt the parse with a non-nil error. The
-TypeScript build (canonical) reports these under the dedicated codes
-`csv_extra_field` and `csv_missing_field`.
+`field.exact` violations halt the parse with a non-nil error carrying a
+dedicated code — `csv_extra_field` when the row has too many fields,
+`csv_missing_field` when it has too few — identical to the codes the
+canonical TypeScript build reports. Read it off the error:
 
-> **Note (Go):** the underlying `jsonic/go` parser does not yet
-> propagate a custom bad-token error code, so the error returned from
-> `Parse` currently carries the generic `unexpected` code rather than
-> `csv_extra_field` / `csv_missing_field`. The plugin already tags the
-> offending token with the specific code, so parity follows
-> automatically once `jsonic/go` honours it. Treat a non-nil error from
-> a `field.exact` parser as a field-count violation. See `AGENTS.md`
-> and [concepts](concepts.md#differences-from-the-typescript-version)
-> for details.
+```go
+_, err := j.Parse("a,b\n1,2,3")
+var je *jsonic.JsonicError
+if errors.As(err, &je) && "csv_extra_field" == je.Code {
+    // row had more fields than the header declares
+}
+```
 
 Other errors come from the parser itself, e.g. `unterminated_string`
 for an unclosed quoted field, and `unexpected` for content that matches

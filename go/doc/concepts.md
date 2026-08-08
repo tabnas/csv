@@ -200,17 +200,20 @@ Go returns `any`, but the concrete types are predictable:
 | Null (under `value` / non-strict) | `nil` |
 | Empty field placeholder | whatever `field.empty` is (default `""`) |
 
-### Known accepted difference: `field.exact` error code
+### Error codes match TypeScript; `field.exact` error *positions* do not
 
-TypeScript raises `csv_extra_field` / `csv_missing_field` (via
-`ctx.t0.bad(code)`) when a row's field count violates `field.exact`.
-`jsonic/go`'s parser does not yet propagate a bad token's custom error
-code — it surfaces every parse error under the generic `unexpected`
-code — so the Go error currently reports `unexpected`. The port already
-tags the offending token with the specific code, so parity follows
-automatically once `jsonic/go` honours it.
+A `field.exact` violation raises `csv_extra_field` / `csv_missing_field`
+(via `ctx.T0.Bad(code)`, the mirror of the TS `ctx.t0.bad(code)`) in both
+runtimes — the engine propagates a bad token's custom code rather than
+flattening it to the generic `unexpected`. The codes are asserted on both
+sides (`go/csv_test.go` `TestFieldExact` and the shared
+`test/spec/field-exact.tsv` fixture), so they cannot drift silently.
 
-Until then, treat a non-nil error from a `field.exact` parser as a
-field-count violation. The Go fixture/unit tests assert that the parse
-*fails*, not the specific code (`go/csv_test.go` `TestFieldExact`). See
-`AGENTS.md` for the full note.
+The remaining difference is cosmetic but real, and only affects the
+`field.exact` errors: Go reports the position as `-1:-1` and renders the
+hint as `Row -1 has too many fields …`, where TS reports `1:1` and
+`Row 2 …`. The `{len}` and `{fsrc}` placeholders are correct in both. The
+cause is upstream — `row` collides with a positional key the Go engine
+injects into hints itself, and the positional value wins. Do not key
+program logic off the row number in a Go `field.exact` error message; the
+`code` is reliable. See `AGENTS.md` "Known limitations".

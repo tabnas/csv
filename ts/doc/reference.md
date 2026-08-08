@@ -56,7 +56,7 @@ All keys are optional. Defaults are in the rightmost column.
 | `field.nonameprefix` | `string` | `'field~'` | Prefix used when a record has more fields than the header has names: extra columns are emitted as `field~N`. |
 | `field.empty` | `any` | `''` | Value substituted for an empty field. |
 | `field.names` | `string[] \| undefined` | `undefined` | Explicit field names. Used for object output when `header: false`. |
-| `field.exact` | `boolean` | `false` | If `true`, error when a record's field count differs from the header's. |
+| `field.exact` | `boolean` | `false` | If `true`, error when a record's field count differs from the expected count. The expected count comes from the header row, or from `field.names` when `header: false`; with neither, there is nothing to compare against and the option is inert. Applies to both object and array output. |
 
 `record` (nested):
 

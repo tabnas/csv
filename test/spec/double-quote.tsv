@@ -9,3 +9,13 @@ a\n"b""c""d""e"	[{"a":"b\"c\"d\"e"}]
 a\n"""""b"	[{"a":"\"\"b"}]
 a\n"b"""""	[{"a":"b\"\""}]
 a\n"""""b"""""	[{"a":"\"\"b\"\""}]
+a\n"	ERROR:unterminated_string
+a\n"""	ERROR:unterminated_string
+a\n"""""	ERROR:unterminated_string
+a\n"""""""	ERROR:unterminated_string
+a\n"b	ERROR:unterminated_string
+a\n"b""	ERROR:unterminated_string
+a\n"b""c	ERROR:unterminated_string
+a\n""	[{"a":""}]
+a\n""""	[{"a":"\""}]
+a\n""""""	[{"a":"\"\""}]

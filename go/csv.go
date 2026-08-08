@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	jsonic "github.com/tabnas/jsonic/go"
 )
@@ -271,50 +272,50 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 					record = []any{}
 				}
 
+				// The field-count check is independent of the result SHAPE: it
+				// only needs a known field list (from the header row or
+				// `field.names`). It used to sit inside the `objres` branch,
+				// which silently disabled `field.exact` for every
+				// `object: false` parse even when a header was present — a
+				// documented option doing nothing. Mirrors the TS raise site.
+				if fields != nil && fieldExact && len(record) != len(fields) {
+					errCode := "csv_missing_field"
+					if len(record) > len(fields) {
+						errCode = "csv_extra_field"
+					}
+					// Mirror the TS `ctx.t0.bad(errCode)`: mark the current
+					// lookahead token as bad with the CSV-specific error code
+					// and halt the parse. The engine propagates a bad token's
+					// custom code, so callers see csv_extra_field /
+					// csv_missing_field here exactly as they do in TS.
+					// The messages interpolate {row}, {len} and {fsrc}, so
+					// the details have to be supplied — without them the
+					// engine leaves the placeholders in the text it shows
+					// the user. `row` counts from 1 and includes the header
+					// line, so it matches the line number a spreadsheet or
+					// editor reports.
+					details := map[string]any{
+						"row": recordI + 1,
+						"len": len(fields),
+					}
+					if len(record) > len(fields) {
+						details["fsrc"] = record[len(fields)]
+					}
+					if ctx.T0 != nil {
+						ctx.ParseErr = ctx.T0.Bad(errCode, details)
+					} else {
+						ctx.ParseErr = (&jsonic.Token{
+							Name: "#BD", Tin: jsonic.TinBD,
+						}).Bad(errCode, details)
+					}
+					return
+				}
+
 				if objres {
 					obj := make(map[string]any)
 					i := 0
 
 					if fields != nil {
-						if fieldExact && len(record) != len(fields) {
-							errCode := "csv_missing_field"
-							if len(record) > len(fields) {
-								errCode = "csv_extra_field"
-							}
-							// Mirror the TS `ctx.t0.bad(errCode)`: mark the current
-							// lookahead token as bad with the CSV-specific error code
-							// and halt the parse.
-							//
-							// NOTE: jsonic-go's parser currently surfaces any ParseErr
-							// under the generic "unexpected" code — it does not yet
-							// propagate a bad token's custom Err code the way jsonic-ts
-							// does. So the error code reported to callers is "unexpected"
-							// rather than csv_extra_field / csv_missing_field. The token
-							// still carries the specific code (via Bad) for forward
-							// compatibility once jsonic-go honours it. See AGENTS.md.
-							// The messages interpolate {row}, {len} and {fsrc}, so
-							// the details have to be supplied — without them the
-							// engine leaves the placeholders in the text it shows
-							// the user. `row` counts from 1 and includes the header
-							// line, so it matches the line number a spreadsheet or
-							// editor reports. Mirrors the TS raise site.
-							details := map[string]any{
-								"row": recordI + 1,
-								"len": len(fields),
-							}
-							if len(record) > len(fields) {
-								details["fsrc"] = record[len(fields)]
-							}
-							if ctx.T0 != nil {
-								ctx.ParseErr = ctx.T0.Bad(errCode, details)
-							} else {
-								ctx.ParseErr = (&jsonic.Token{
-									Name: "#BD", Tin: jsonic.TinBD,
-								}).Bad(errCode, details)
-							}
-							return
-						}
-
 						for fI := 0; fI < len(fields); fI++ {
 							var val any = emptyField
 							if fI < len(record) && !jsonic.IsUndefined(record[fI]) {
@@ -636,10 +637,30 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 			}
 
 			// Only match when quote is at the start of a field.
+			//
+			// What precedes the quote must be tested as TEXT, not as a single
+			// byte: a fixed token can be several characters long (a multi-char
+			// `field.separation`) and a single character can be several bytes
+			// long (`field.separation: "€"`). The old test read src[sI-1] and
+			// widened that one byte to a rune, so after a multi-byte separator
+			// it compared the separator's LAST BYTE (0xAC for €) against the
+			// token table, never matched, and left the quoted field as literal
+			// text — the go/encoding/csv NonASCIICommaAndCommentWithQuotes
+			// case, where TypeScript (canonical) gets it right.
 			if sI > 0 {
-				prev := rune(src[sI-1])
-				_, isFixed := cfg.FixedTokens[string(prev)]
-				if !isFixed && !cfg.LineChars[prev] && !cfg.SpaceChars[prev] {
+				fieldStart := false
+				for tokenSrc := range cfg.FixedTokens {
+					if 0 < len(tokenSrc) && len(tokenSrc) <= sI &&
+						src[sI-len(tokenSrc):sI] == tokenSrc {
+						fieldStart = true
+						break
+					}
+				}
+				if !fieldStart {
+					prev, _ := utf8.DecodeLastRuneInString(src[:sI])
+					fieldStart = cfg.LineChars[prev] || cfg.SpaceChars[prev]
+				}
+				if !fieldStart {
 					return nil
 				}
 			}
