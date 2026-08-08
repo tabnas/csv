@@ -24,13 +24,15 @@ var Defaults map[string]any
 The default option set. Pass it to `UseDefaults` so user-supplied
 overrides are merged on top of the defaults.
 
-## `Version` (string)
+## `VERSION` (string)
 
 ```go
-const Version = "..."
+const VERSION = "..."
 ```
 
-The module version, kept in sync with the `go/v*` Git tag.
+The module version, kept in sync with the `go/v*` Git tag. It always
+equals `ts/package.json` `"version"` — `TestVersionMatchesPackageJSON`
+in `go/version_test.go` fails the build if the two drift.
 
 ## Option keys
 
