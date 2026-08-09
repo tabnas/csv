@@ -162,9 +162,16 @@ script on the miss path (once per process). This matters because CI's go job is
 a bare `go test ./...` over a fresh clone: without the self-fetch the Go half of
 the conformance pair would not run there at all.
 
-The **only** licensed skip is "the corpus could not be obtained" (no network,
-or no `node` for the case extractor). Once a corpus is present every case in it
-is judged — see the `judged` counters, which fail if a case slips through.
+**Neither half may skip — ever.** "The corpus could not be obtained" (no
+network, no `node` for the case extractor) is a **failure**, not a skip, in
+both runtimes: a conformance suite that quietly does not run reports green
+while measuring nothing. Once a corpus is present every case in it is judged —
+see the `judged` counters, which fail if a case slips through.
+
+The fetch verifies what it obtained: the `go/encoding/csv` source is SHA-256
+pinned, and csv-spectrum is checked against a pinned document count and a
+pinned SHA-256 digest over the extracted corpus content (the tarball's own
+bytes are not stable, so the pin is over what comes out of it).
 
 `scripts/extract-go-csv-cases.mjs` converts Go's `readTests` slice literal
 into `test/suites/go-encoding-csv/cases.json` by parsing the Go source (not by
