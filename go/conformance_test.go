@@ -19,9 +19,11 @@ package tabnascsv
 // checkout.
 //
 // If the fetch cannot happen — no network, no `node` for the case extractor —
-// the affected suite SKIPS with the fetch command in the message. A skip is
-// reserved for "the corpus could not be obtained": once a corpus is present,
-// every case in it is judged and nothing is silently exempt.
+// the affected suite FAILS LOUDLY with the fetch command in the message. It
+// never skips. A conformance suite that quietly does not run reports green
+// while measuring nothing, which is worse than having no suite at all; the
+// TypeScript half throws for the same reason. Once a corpus is present, every
+// case in it is judged and nothing is silently exempt.
 //
 // On DIVERGENCES: go/encoding/csv is a strict RFC 4180 reader. @tabnas/csv is
 // deliberately a lenient, PapaParse-compatible reader with RFC 4180 quoting
@@ -68,24 +70,22 @@ func fetchCorpora() error {
 	return fetchErr
 }
 
-// requireCorpus reports whether `path` exists, fetching the corpora first if
-// it does not. When it still does not exist the caller SKIPS: the corpus is
-// third-party data this repo deliberately does not vendor, so "could not be
-// obtained" is an environment fact, not a conformance failure.
-func requireCorpus(t *testing.T, path string) bool {
+// requireCorpus makes `path` present or FAILS the test. It fetches the corpora
+// first if the path is absent, and calls t.Fatalf if it is still absent after
+// that. It never calls t.Skip: "the corpus could not be obtained" would leave
+// the suite reporting green while judging nothing, so it is a failure here,
+// exactly as it is in the TypeScript half.
+func requireCorpus(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); err == nil {
-		return true
+		return
 	}
 	if err := fetchCorpora(); err != nil {
-		t.Skipf("%s\n  expected: %s\n  fetch failed: %v", conformanceMissing, path, err)
-		return false
+		t.Fatalf("%s\n  expected: %s\n  fetch failed: %v", conformanceMissing, path, err)
 	}
 	if _, err := os.Stat(path); err != nil {
-		t.Skipf("%s\n  expected: %s", conformanceMissing, path)
-		return false
+		t.Fatalf("%s\n  expected: %s", conformanceMissing, path)
 	}
-	return true
 }
 
 // jsonOf renders a parse result in the same canonical form as the corpus
@@ -130,9 +130,7 @@ func spectrumDirs(t *testing.T) (string, string) {
 	csvDir := filepath.Join(dir, "csvs")
 	jsonDir := filepath.Join(dir, "json")
 	for _, d := range []string{dir, csvDir, jsonDir} {
-		if !requireCorpus(t, d) {
-			return "", ""
-		}
+		requireCorpus(t, d)
 	}
 	return csvDir, jsonDir
 }
@@ -323,9 +321,7 @@ const conformanceScore = 39
 func loadGoCorpus(t *testing.T) goCorpus {
 	t.Helper()
 	file := filepath.Join(suitesDir(), "go-encoding-csv", "cases.json")
-	if !requireCorpus(t, file) {
-		return goCorpus{}
-	}
+	requireCorpus(t, file)
 	raw, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatalf("corpus at %s is not readable: %v", file, err)

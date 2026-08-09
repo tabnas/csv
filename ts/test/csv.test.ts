@@ -5,13 +5,9 @@ import assert from 'node:assert'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import Util from 'util'
-
 import { Tabnas } from '@tabnas/parser'
 import { jsonic } from '@tabnas/jsonic'
 import { Csv } from '../dist/csv'
-
-const Spectrum = require('csv-spectrum')
 
 const fixturesDir = join(__dirname, '..', '..', 'test', 'fixtures')
 const manifest = JSON.parse(
@@ -336,35 +332,14 @@ true,[1,2],{x:{y:"q\\"w"}}
     assert.throws(() => j.parse('a\n{x:1}y'), /unexpected/)
   })
 
-  test('spectrum', async () => {
-    const j = new Tabnas().use(jsonic).use(Csv)
-    const tests = await Util.promisify(Spectrum)()
-    let judged = 0
-
-    for (let i = 0; i < tests.length; i++) {
-      let test = tests[i]
-      let name = test.name
-      let json = JSON.parse(test.json.toString())
-      let csv = test.csv.toString()
-      let testname = name + ' ' + (i + 1) + '/' + tests.length
-
-      // `location_coordinates` is inconsistent UPSTREAM — its .json is a bare
-      // object where every other expectation is an array of records, and its
-      // phone number was scrubbed in the .json but not in the .csv, so it
-      // cannot judge any parser. Excluded BY NAME (the old code excluded
-      // `5 === i`, which named neither the case nor the reason and silently
-      // tracked whatever case happened to be sixth). The defect itself, and
-      // what @tabnas/csv does with the document, are asserted in
-      // test/conformance.test.ts — nothing about it goes unchecked.
-      if ('location_coordinates' === name) continue
-
-      judged++
-      let res = j.parse(csv)
-      assert.deepEqual({ [testname]: res }, { [testname]: json })
-    }
-
-    assert.equal(judged, tests.length - 1, 'every spectrum case must be judged')
-  })
+  // NOTE: csv-spectrum used to be run from here, off the `csv-spectrum` npm
+  // devDependency — an UNPINNED `^2.0.0`, so the set under test moved whenever
+  // the registry did. It now lives in ts/test/conformance.test.ts, driven by
+  // the corpus fetched at a pinned commit by scripts/fetch-csv-suites.sh, with
+  // all 12 documents accounted for (including the upstream-defective
+  // `location_coordinates`, which is asserted rather than skipped) and the
+  // same corpus run by go/conformance_test.go. Do not reinstate a second,
+  // unpinned copy of the corpus here.
 
   test('fixtures', async () => {
     const csv = new Tabnas().use(jsonic).use(Csv)
@@ -386,12 +361,28 @@ true,[1,2],{x:{y:"q\\"w"}}
       const raw = readFileSync(join(fixturesDir, csvFile + '.csv'), 'utf8')
 
       if (entry.err) {
+        // The assert.fail() used to sit INSIDE the try, so the catch swallowed
+        // its AssertionError and re-reported it as a code mismatch against
+        // 'ERR_ASSERTION', hiding the real message ("this must-fail fixture
+        // parsed cleanly"). Capture first, assert after.
+        let thrown: any = undefined
+        let parsed = false
         try {
           parser.parse(raw)
-          assert.fail('Expected error ' + entry.err + ' for fixture: ' + name)
+          parsed = true
         } catch (e: any) {
-          assert.deepEqual(entry.err, e.code)
+          thrown = e
         }
+        assert.equal(
+          parsed,
+          false,
+          'Expected error ' + entry.err + ' for fixture: ' + name,
+        )
+        assert.equal(
+          thrown.code,
+          entry.err,
+          'Wrong error code for fixture: ' + name + ' — ' + thrown.message,
+        )
       } else {
         try {
           const expected = JSON.parse(

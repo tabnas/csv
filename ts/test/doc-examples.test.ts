@@ -115,7 +115,12 @@ function importsToRequire(code) {
 }
 
 // Rewrite `<expr>  // => <expected>` lines into __eq(expr, expected) calls.
+// ARROW is applied to a SINGLE line; ARROW_ANY is the same pattern with /m so
+// it can be used to test a whole multi-line block. Without /m the `$` anchors
+// to the end of the joined string, so a block whose `// =>` is not on its last
+// line would be silently dropped from the suite entirely.
 const ARROW = /\/\/\s*=>(.*)$/
+const ARROW_ANY = /\/\/\s*=>(.*)$/m
 function rewriteAssertions(code) {
   let count = 0
   const out = code.split('\n').map((line) => {
@@ -171,7 +176,7 @@ describe('doc-examples', () => {
     blocks.forEach((b, bi) => {
       if (b.ignore) return
       const joined = b.code.join('\n')
-      if (!ARROW.test(joined)) return // no assertions -> skip
+      if (!ARROW_ANY.test(joined)) return // no assertions -> skip
       const { code, count } = rewriteAssertions(importsToRequire(joined))
       if (count === 0) return
       testable++
@@ -185,8 +190,29 @@ describe('doc-examples', () => {
     })
   }
 
-  it('found at least one tested example (sanity)', () => {
-    // Not a hard failure if a repo has no `// =>` examples yet.
-    assert.ok(testable >= 0, `tested ${testable} doc example block(s)`)
+  it('the doc corpus has not silently shrunk', () => {
+    // This used to read `assert.ok(testable >= 0, ...)`, which is true for
+    // every possible value: the harness could stop finding docs altogether —
+    // a renamed directory, a broken glob, a doc rewrite that dropped every
+    // `// =>` — and stay green while asserting nothing.
+    //
+    // FLOOR is re-measured, not inherited: 18 asserted blocks were observed
+    // in this repo on 2026-08-09 (1 in ts/README.md, 14 in ts/doc/guide.md,
+    // 3 in ts/doc/tutorial.md). Raise it when you add examples; never lower
+    // it to get green.
+    const FLOOR = 18
+    assert.ok(
+      files.length > 0,
+      'found no markdown files at all under ' + REPO + ' — the doc glob is broken',
+    )
+    assert.ok(
+      files.some((f) => path.basename(f) === 'README.md'),
+      'no README.md was collected — the doc glob is broken',
+    )
+    assert.ok(
+      testable >= FLOOR,
+      `only ${testable} doc example block(s) are asserted, expected at least ` +
+        `${FLOOR}. Docs or the extractor regressed — do NOT lower the floor.`,
+    )
   })
 })
