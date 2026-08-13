@@ -1,0 +1,16 @@
+{
+  "$schema": "https://tabnas.dev/schema/plugin.schema.json",
+  "name": "@tabnas/csv",
+  "go": "github.com/tabnas/csv/go",
+  "version": "0.5.2",
+  "description": "CSV (RFC 4180) parsing for the tabnas engine.",
+  "base": "@tabnas/jsonic",
+  "engine": "@tabnas/parser",
+  "grammar": "csv-grammar.jsonic",
+  "extensions": [".csv"],
+  "mediaTypes": ["text/csv"],
+  "specDir": "test/spec",
+  "errorCodes": ["csv_extra_field", "csv_missing_field"],
+  "docs": "https://tabnas.dev/docs/packages",
+  "repository": "https://github.com/tabnas/csv"
+}
