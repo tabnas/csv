@@ -27,7 +27,7 @@ There are two implementations that must behave identically — TypeScript
 | [`ts/`](ts/) | **Canonical** TypeScript implementation — the `@tabnas/csv` package. Plugin in `src/csv.ts`. Imports the engine as `@tabnas/parser` and the base grammar as `@tabnas/jsonic`. |
 | [`go/`](go/) | Go port — `github.com/tabnas/csv/go`. Plugin in `csv.go`. Depends on `github.com/tabnas/jsonic/go` (jsonic re-exports the engine API in Go). |
 | [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, **source of truth for both runtimes**. Embedded verbatim into both source files. Lives at the repo root — `ts/embed-grammar.js` reads `../csv-grammar.jsonic`. |
-| [`tabnas.plugin.json`](tabnas.plugin.json) | Machine-readable plugin descriptor — name, versions, base, grammar, extensions, error codes. Consumed by agent tooling; keep `errorCodes` in step with `options: error:` in the grammar. |
+| [`tabnas.plugin.json`](tabnas.plugin.json) | Machine-readable plugin descriptor — name, base, grammar, extensions, error codes. Consumed by agent tooling. It deliberately carries **no version**: `versionSource` names `ts/package.json` instead, so this file cannot become a fourth place for the version to drift. Keep `errorCodes` in step with `options: error:` in the grammar. |
 | [`ts/embed-grammar.js`](ts/embed-grammar.js) | Embeds the grammar into `ts/src/csv.ts` AND `go/csv.go`. |
 | [`test/fixtures/`](test/fixtures/) | Shared conformance fixtures (`.csv` input → `.json` expected), run by both runtimes. |
 | [`test/fixtures/manifest.json`](test/fixtures/manifest.json) | Drives the fixture suite (per-case names, options, `csvFile` aliases). |
@@ -64,7 +64,7 @@ for you (see below).
 **TypeScript is canonical. Go is a port of it.** When you change
 behaviour:
 
-1. Change `ts/src/csv.ts` first (or `ts/csv-grammar.jsonic` for grammar
+1. Change `ts/src/csv.ts` first (or `csv-grammar.jsonic` for grammar
    changes — see the embed section below).
 2. Port the same change to `go/csv.go`.
 3. Add/extend the shared fixture(s) in `test/fixtures/` + `manifest.json`
@@ -82,7 +82,7 @@ relevant `doc/*.md` Errors section rather than silently diverging (see
 
 ## The grammar is embedded — never hand-edit the embedded block
 
-`ts/csv-grammar.jsonic` is embedded verbatim into **both** `ts/src/csv.ts`
+`csv-grammar.jsonic` is embedded verbatim into **both** `ts/src/csv.ts`
 and `go/csv.go`, between these markers:
 
 ```
@@ -91,7 +91,7 @@ and `go/csv.go`, between these markers:
 // --- END EMBEDDED csv-grammar.jsonic ---
 ```
 
-Edit `ts/csv-grammar.jsonic`, then run the embed step. Never edit the text
+Edit `csv-grammar.jsonic`, then run the embed step. Never edit the text
 between the markers by hand — it will be overwritten. (The grammar may not
 contain backticks; `embed-grammar.js` aborts if it does, since the Go side
 uses a raw string.)
@@ -288,9 +288,14 @@ make build && make test      # both runtimes — the check that matters
 Narrower, when iterating:
 
 ```bash
-cd ts && npm test            # node --test over dist-test/*.test.js
-cd go && go test ./...       # unit tests + the shared spec fixtures
+(cd ts && npm run build && npm test)   # build first: `npm test` only runs dist-test/
+(cd go && go test ./...)               # unit tests + the shared spec fixtures
 ```
+
+Each line is a subshell, and the TS one builds before testing on purpose.
+`npm test` runs the compiled `dist-test/*.test.js` and does **not** compile —
+run it alone on a fresh checkout and it either fails for want of `dist-test/`
+or silently passes against stale output.
 
 What "correct" means here, in order of authority:
 
