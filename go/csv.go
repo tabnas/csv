@@ -499,8 +499,8 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				&jsonic.AltSpec{P: "elem"},
 			)
 			rs.AddClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}, G: "end"},
 			)
 		})
 
@@ -520,7 +520,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				&jsonic.AltSpec{P: "val"},
 			)
 			rs.AddClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}, {LN, ZZ}}, B: 1,
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
 					A: jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
@@ -529,9 +529,9 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 							}
 						}
 					})},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}}, R: "elem"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}}, R: "elem", G: "comma"},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}, G: "end"},
 			)
 			rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 				done, _ := r.U["done"].(bool)
@@ -578,8 +578,8 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			rs.PrependOpen(&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1})
 			rs.AddOpen(&jsonic.AltSpec{P: "elem"})
 			rs.PrependClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}, G: "end"},
 			)
 		})
 
@@ -597,7 +597,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				}),
 			})
 			rs.PrependClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}, {LN, ZZ}}, B: 1,
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
 					A: jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
@@ -606,7 +606,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 							}
 						}
 					})},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1},
+				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
 			)
 		})
 
