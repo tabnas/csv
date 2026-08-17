@@ -13,6 +13,17 @@
     "text/csv"
   ],
   "specDir": "test/spec",
+  "clib": {
+    "dir": "go/clib",
+    "library": "libtabnascsv",
+    "abi": "v1",
+    "errorCodes": [
+      "usage",
+      "grammar",
+      "handle",
+      "internal"
+    ]
+  },
   "errorCodes": [
     "csv_extra_field",
     "csv_missing_field"
