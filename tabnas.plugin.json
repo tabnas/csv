@@ -12,6 +12,14 @@
   "mediaTypes": [
     "text/csv"
   ],
+  "languageId": "csv",
+  "pluginKind": "grammar",
+  "grammarKind": "closure",
+  "lexStream": "clean",
+  "syncGroups": [
+    "end",
+    "comma"
+  ],
   "specDir": "test/spec",
   "clib": {
     "dir": "go/clib",
