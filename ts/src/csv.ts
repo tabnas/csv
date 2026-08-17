@@ -92,9 +92,9 @@ const grammarText = `
     { r: record }
   ]
   rule: newline: close: [
-    { s: '#LN #LN' r: newline }
-    { s: '#LN' r: newline }
-    { s: '#ZZ' }
+    { s: '#LN #LN' r: newline g: end }
+    { s: '#LN' r: newline g: end }
+    { s: '#ZZ' g: end }
     { r: record }
   ]
 
@@ -102,9 +102,9 @@ const grammarText = `
     { p: list }
   ]
   rule: record: close: [
-    { s: '#ZZ' }
-    { s: '#LN #ZZ' b: 1 }
-    { s: '#LN' r: '@record-close-next' }
+    { s: '#ZZ' g: end }
+    { s: '#LN #ZZ' b: 1 g: end }
+    { s: '#LN' r: '@record-close-next' g: end }
   ]
 
   rule: text: open: [
@@ -444,8 +444,8 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
         ])
         .close([
           // LN ends record.
-          { s: [LN], b: 1 },
-          { s: [ZZ] },
+          { s: [LN], b: 1, g: 'end' },
+          { s: [ZZ], g: 'end' },
         ])
     })
 
@@ -470,12 +470,13 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
             s: [CA, [LN, ZZ]],
             b: 1,
             a: (r: Rule) => r.node.push(options.field.empty),
+            g: 'comma',
           },
           // Next element.
-          { s: [CA], r: 'elem' },
+          { s: [CA], r: 'elem', g: 'comma' },
           // LN ends record.
-          { s: [LN], b: 1 },
-          { s: [ZZ] },
+          { s: [LN], b: 1, g: 'end' },
+          { s: [ZZ], g: 'end' },
         ])
         .bc((r: Rule) => {
           // Push the parsed field value (unless an open alt already did so).
@@ -533,8 +534,8 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
         .close(
           [
             // LN ends record.
-            { s: [LN], b: 1 },
-            { s: [ZZ] },
+            { s: [LN], b: 1, g: 'end' },
+            { s: [ZZ], g: 'end' },
           ],
           // Prepend so these win over jsonic's default close alts.
         )
@@ -559,9 +560,10 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
             s: [CA, [LN, ZZ]],
             b: 1,
             a: (r: Rule) => r.node.push(options.field.empty),
+            g: 'comma',
           },
           // LN ends record.
-          { s: [LN], b: 1 },
+          { s: [LN], b: 1, g: 'end' },
         ])
     })
 
