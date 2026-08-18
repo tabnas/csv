@@ -309,7 +309,13 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
         }
 
         if (objres) {
-          let obj: Record<string, any> = {}
+          // Allocated without a prototype: the field names come from the
+          // header row, so on a plain literal a column called __proto__ was
+          // silently dropped (the assignment ran the Object.prototype setter
+          // instead of defining a key) and that column vanished from every
+          // record. Without a prototype it is an ordinary key, matching how
+          // jsonic and json5 treat the same name.
+          let obj: Record<string, any> = Object.create(null)
           let i = 0
 
           if (fields) {
