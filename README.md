@@ -13,6 +13,8 @@ of arrays), with headers, RFC 4180 quoting, custom field/record
 separators, streaming, and a strict / non-strict mode. Available for
 both TypeScript and Go.
 
+Docs, guides, the error reference and the playground: **[tabnas.dev](https://tabnas.dev)**.
+
 ## Install
 
 ```bash
