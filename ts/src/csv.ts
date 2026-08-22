@@ -18,7 +18,7 @@ import { jsonic } from '@tabnas/jsonic'
 // VERSION is this package's version. It MUST equal package.json "version":
 // the release orchestrator rewrites both, and test/version.test.ts fails the
 // build if they drift. Mirrors `const VERSION` in go/csv.go.
-const VERSION = '0.5.6'
+const VERSION = '0.5.7'
 
 // See defaults below for commentary.
 type CsvOptions = {
