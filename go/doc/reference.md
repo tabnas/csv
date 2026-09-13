@@ -31,7 +31,7 @@ const VERSION = "..."
 ```
 
 The module version, kept in sync with the `go/v*` Git tag. It always
-equals `ts/package.json` `"version"` — `TestVersionMatchesPackageJSON`
+equals `ts/package.json` `"version"`; `TestVersionMatchesPackageJSON`
 in `go/version_test.go` fails the build if the two drift.
 
 ## Option keys
@@ -103,8 +103,8 @@ func(what string, payload any)
 ## Errors
 
 `field.exact` violations halt the parse with a non-nil error carrying a
-dedicated code — `csv_extra_field` when the row has too many fields,
-`csv_missing_field` when it has too few — identical to the codes the
+dedicated code (`csv_extra_field` when the row has too many fields,
+`csv_missing_field` when it has too few), identical to the codes the
 canonical TypeScript build reports. Read it off the error:
 
 ```go
@@ -115,7 +115,7 @@ if errors.As(err, &je) && "csv_extra_field" == je.Code {
 }
 ```
 
-Other errors come from the parser itself, e.g. `unterminated_string`
+Other errors come from the parser itself, for example `unterminated_string`
 for an unclosed quoted field, and `unexpected` for content that matches
 no grammar alternate (such as trailing junk after a complete non-strict
 value: `j.Parse("a\n{x:1}y")` returns a non-nil error).
@@ -156,7 +156,7 @@ Concretely, the plugin accepts:
 - **Comment lines** (when `comment: true`): a line starting with `#` is
   dropped before record assembly.
 - **Embedded jsonic values** (non-strict mode only): a field body may
-  be any jsonic value — `[1,2]`, `{x:1}`, a quoted string with
+  be any jsonic value: `[1,2]`, `{x:1}`, a quoted string with
   backslash escapes, a number, or a keyword.
 
 A railroad/syntax diagram of the live grammar is in

@@ -141,7 +141,7 @@ const parse = new Tabnas().use(jsonic).use(Csv, { trim: true })
 parse.parse('a,b\n  hello  ,  world  ') // => [{ a: 'hello', b: 'world' }]
 ```
 
-Internal whitespace is preserved — `'  hello world  '` trims to
+Internal whitespace is preserved: `'  hello world  '` trims to
 `'hello world'`.
 
 ## Skip comment lines
@@ -158,7 +158,7 @@ const parse = new Tabnas().use(jsonic).use(Csv, { comment: true })
 parse.parse('a,b\n# this row is ignored\n1,2') // => [{ a: '1', b: '2' }]
 ```
 
-A `#` *inside* a field is left alone unless it follows whitespace — see
+A `#` *inside* a field is left alone unless it follows whitespace; see
 [Concepts: Comments and whitespace](concepts.md#comments-and-whitespace).
 
 ## Preserve blank lines as empty records
@@ -211,7 +211,7 @@ The thrown error's `code` property is `csv_extra_field` or
 ## Allow JSON values inside fields
 
 In strict mode, `[1,2]` and `{x:1}` are just text. Switch to non-strict
-mode and jsonic re-engages — you get the JSON value back as a parsed
+mode and jsonic re-engages: you get the JSON value back as a parsed
 JavaScript value:
 
 ```js
@@ -260,12 +260,12 @@ parse.parse('a,b\n1,2\n3,4')
 ```
 
 Errors thrown inside the parser are forwarded to the callback as an
-`'error'` event rather than re-thrown — branch on `what` accordingly.
+`'error'` event rather than re-thrown; branch on `what` accordingly.
 
 ## Reuse the same parser for many inputs
 
 The result of `new Tabnas().use(jsonic).use(Csv, opts)` is a parser
-instance that is fully reusable — there is no per-call cost beyond the
+instance that is fully reusable; there is no per-call cost beyond the
 parse itself:
 
 ```typescript

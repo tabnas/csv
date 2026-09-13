@@ -30,7 +30,7 @@ To get every row including the first, also set `header: false`.
 
 ## Use a different field delimiter
 
-Set `field.separation`. Tab, pipe, or any other string — including
+Set `field.separation`. Tab, pipe, or any other string, including
 multi-character strings such as `"~~"`:
 
 ```go
@@ -84,7 +84,7 @@ result, _ := j.Parse("1,2,3")
 // [{x: 1, y: 2, z: 3}]
 ```
 
-`field.names` is ignored when `object: false` — every row comes out as a
+`field.names` is ignored when `object: false`; every row comes out as a
 plain `[]any` in that case.
 
 ## Trim surrounding whitespace from fields
@@ -127,7 +127,7 @@ result, _ := j.Parse("a\n1\n\n2")
 ## Substitute a value for empty fields
 
 Use `field.empty` to set the placeholder for missing cells. Any value
-works — string, `nil`, bool, number:
+works: string, `nil`, bool, number:
 
 ```go
 j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
@@ -159,7 +159,7 @@ error code.
 ## Allow Jsonic values inside fields
 
 In strict mode, `[1,2]` and `{x:1}` are just text. Switch to non-strict
-and jsonic re-engages — you get the parsed value back as a Go value:
+and jsonic re-engages: you get the parsed value back as a Go value:
 
 ```go
 j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{"strict": false})
@@ -207,7 +207,7 @@ j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, map[string]any{
 
 ## Reuse the same parser for many inputs
 
-The configured Jsonic instance is reusable — there is no per-call setup
+The configured Jsonic instance is reusable; there is no per-call setup
 cost beyond the parse itself:
 
 ```go

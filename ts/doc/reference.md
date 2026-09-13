@@ -143,7 +143,7 @@ Field-count violations under `field.exact` raise these error codes
 | `csv_extra_field` | `unexpected extra field value: <src>` |
 | `csv_missing_field` | `missing field` |
 
-Other errors come from the engine itself, e.g. `unterminated_string`
+Other errors come from the engine itself, for example `unterminated_string`
 for a quoted field with no closing quote, and `unexpected` for content
 that cannot be matched by any grammar alternate (such as trailing junk
 after a complete non-strict value: `parse.parse('a\n{x:1}y')` throws
@@ -197,7 +197,7 @@ Concretely, the plugin accepts:
 - **Comment lines** (when `comment: true`): a line starting with `#` is
   dropped before record assembly.
 - **Embedded jsonic values** (non-strict mode only): a field body may
-  be any jsonic value — `[1,2]`, `{x:1}`, a quoted string with
+  be any jsonic value: `[1,2]`, `{x:1}`, a quoted string with
   backslash escapes, a number, or a keyword.
 
 The token legend used by the railroad diagram:
