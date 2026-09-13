@@ -45,10 +45,10 @@ parse.parse('name,age\nAlice,30\nBob,25') // => [{ name: 'Alice', age: '30' }, {
 Full documentation, in the four [Diátaxis](https://diataxis.fr)
 quadrants:
 
-- [Tutorial](doc/tutorial.md) — a guided first parse.
-- [How-to guide](doc/guide.md) — task recipes (delimiters, headers, streaming, …).
-- [Reference](doc/reference.md) — the public API, every option, and the grammar.
-- [Concepts](doc/concepts.md) — how the plugin works on the engine, and why.
+- [Tutorial](doc/tutorial.md). A guided first parse.
+- [How-to guide](doc/guide.md). Task recipes (delimiters, headers, streaming, …).
+- [Reference](doc/reference.md). The public API, every option, and the grammar.
+- [Concepts](doc/concepts.md). How the plugin works on the engine, and why.
 
 For the Go port, see [`../go/doc/`](../go/doc/).
 

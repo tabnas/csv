@@ -1,4 +1,4 @@
-# Tutorial — your first CSV parse (Go)
+# Tutorial: your first CSV parse (Go)
 
 This walks you from nothing to a working parse, then through the four
 shapes of program you are most likely to need: a basic parse, type
@@ -7,8 +7,8 @@ builds on the last.
 
 For a recipe-style index of individual tasks, see the
 [how-to guide](guide.md). For exhaustive signatures and every option,
-see the [reference](reference.md). For how it works under the hood —
-including how the Go API differs from the TypeScript original — see
+see the [reference](reference.md). For how it works under the hood
+(including how the Go API differs from the TypeScript original), see
 [concepts](concepts.md).
 
 ## 1. Install
@@ -73,7 +73,7 @@ func main() {
 
 The first row was treated as a header (the default), and each
 subsequent row became a `map[string]any` keyed by those names. `30` and
-`25` are *strings* — strict mode is on by default, and strict mode keeps
+`25` are *strings*: strict mode is on by default, and strict mode keeps
 every field as the raw text it appeared as.
 
 ## 3. Turn the strings into numbers
@@ -97,7 +97,7 @@ result, _ := j.Parse("name,age,active\nAlice,30,true\nBob,25,false")
 // where 30, 25 are float64 and true, false are bool.
 ```
 
-These options are independent — turn on whichever ones the data calls
+These options are independent; turn on whichever ones the data calls
 for.
 
 ## 4. Quoted fields with commas and newlines
@@ -146,11 +146,11 @@ j.Parse("a,b\n1,2\n3,4")
 // row: map[a:3 b:4]
 ```
 
-You now have the four shapes — basic parse, type coercion, quoted data,
+You now have the four shapes: basic parse, type coercion, quoted data,
 streaming. Everything else is variations on these.
 
 ## Where to go next
 
-- [How-to guide](guide.md) — focused recipes for individual tasks.
-- [Reference](reference.md) — the public API, every option, and the grammar.
-- [Concepts](concepts.md) — how the plugin works, and how Go differs from TS.
+- [How-to guide](guide.md). Focused recipes for individual tasks.
+- [Reference](reference.md). The public API, every option, and the grammar.
+- [Concepts](concepts.md). How the plugin works, and how Go differs from TS.

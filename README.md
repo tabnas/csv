@@ -60,7 +60,7 @@ result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 ## Conformance
 
 RFC 4180 quoting (`""` escaping, embedded separators, embedded line breaks)
-inside a deliberately **lenient, PapaParse-compatible** reader — not a strict
+inside a deliberately **lenient, PapaParse-compatible** reader, not a strict
 RFC 4180 validator. Verified in both runtimes against two third-party corpora
 at pinned upstream commits:
 
@@ -78,22 +78,22 @@ corpora and reproduce the numbers.
 ## Documentation
 
 Full documentation follows the [Diátaxis](https://diataxis.fr) four
-quadrants — one file each for learning, doing, looking up, and
+quadrants: one file each for learning, doing, looking up, and
 understanding.
 
-**TypeScript** — [`ts/doc/`](ts/doc/)
+**TypeScript**: [`ts/doc/`](ts/doc/)
 
-- [Tutorial](ts/doc/tutorial.md) — a guided first parse.
-- [How-to guide](ts/doc/guide.md) — task recipes.
-- [Reference](ts/doc/reference.md) — API, options, and grammar.
-- [Concepts](ts/doc/concepts.md) — how it works, and why.
+- [Tutorial](ts/doc/tutorial.md). A guided first parse.
+- [How-to guide](ts/doc/guide.md). Task recipes.
+- [Reference](ts/doc/reference.md). API, options, and grammar.
+- [Concepts](ts/doc/concepts.md). How it works, and why.
 
-**Go** — [`go/doc/`](go/doc/)
+**Go**: [`go/doc/`](go/doc/)
 
-- [Tutorial](go/doc/tutorial.md) — a guided first parse.
-- [How-to guide](go/doc/guide.md) — task recipes.
-- [Reference](go/doc/reference.md) — API, options, and grammar.
-- [Concepts](go/doc/concepts.md) — how it works, plus differences from TS.
+- [Tutorial](go/doc/tutorial.md). A guided first parse.
+- [How-to guide](go/doc/guide.md). Task recipes.
+- [Reference](go/doc/reference.md). API, options, and grammar.
+- [Concepts](go/doc/concepts.md). How it works, plus differences from TS.
 
 ## Repository layout
 

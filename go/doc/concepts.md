@@ -1,7 +1,7 @@
 # Concepts (Go)
 
 Background on how the CSV plugin works, and why it is built the way it
-is — plus where the Go port differs from the canonical TypeScript
+is, plus where the Go port differs from the canonical TypeScript
 implementation. This is understanding-oriented reading; for steps see
 the [tutorial](tutorial.md) and [how-to guide](guide.md), and for exact
 signatures see the [reference](reference.md).
@@ -23,7 +23,7 @@ escapes). That capability is unique to this plugin.
 The plugin does not replace the parser; it reconfigures one. When you
 write `j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults)`:
 
-1. The base relaxed-JSON grammar is already present — the `val`, `map`,
+1. The base relaxed-JSON grammar is already present: the `val`, `map`,
    `list`, `pair`, and `elem` rules and the standard lexer matchers.
 2. `Csv` then layers CSV behavior on top: it adds the `csv`, `newline`,
    `record`, and `text` rules from the embedded grammar, reconfigures
@@ -45,21 +45,21 @@ rule has an *open* and a *close* phase, each phase a list of
 *alternates* matching a short token pattern (at most two tokens of
 lookahead). The CSV grammar is a small ladder of rules:
 
-- `csv` — the start rule. Skips leading blank lines, then alternates
+- `csv`. The start rule. Skips leading blank lines, then alternates
   between `record` and `newline`.
-- `record` — one row. Pushes `list` to collect the fields, and closes
+- `record`. One row. Pushes `list` to collect the fields, and closes
   at a line ending or end of input.
-- `list` / `elem` / `val` — the fields of a row. `list` allocates the
+- `list` / `elem` / `val`. The fields of a row. `list` allocates the
   per-record field slice; `elem` consumes one field (handling empties
   around separators); `val` resolves a field's value.
-- `text` — accumulates a run of value and whitespace tokens into one
+- `text`. Accumulates a run of value and whitespace tokens into one
   field string, applying `trim` if enabled.
-- `newline` — collapses one or more record separators between records.
+- `newline`. Collapses one or more record separators between records.
 
 The `csv`, `newline`, `record`, and `text` rules live in the shared
 `csv-grammar.jsonic` file. The `list`, `elem`, and `val` rules are
 configured *in code* (via `j.Rule(...)`) because non-strict mode must
-preserve jsonic's default alternatives for those rules — see
+preserve jsonic's default alternatives for those rules; see
 [Relationship to the grammar file](#relationship-to-the-grammar-file).
 
 ## Strict vs non-strict mode
@@ -72,9 +72,9 @@ is what you want for "normal" CSV.
 
 **Non-strict mode** (`"strict": false`). Field bodies are parsed *as
 jsonic*. Scalars (`true`, `false`, `null`, numbers) decode to native Go
-types, and structural jsonic values inside a cell work too — `[1,2]`
+types, and structural jsonic values inside a cell work too: `[1,2]`
 becomes `[]any{1, 2}`, `{x:1}` becomes `map[string]any{"x": 1}`. Quoted
-strings honour jsonic's escape rules (e.g. `"a\"b"`) rather than CSV's
+strings honour jsonic's escape rules (for example `"a\"b"`) rather than CSV's
 `""`-doubling. To make this convenient, non-strict mode also flips
 `trim`, `comment`, `number`, and `value` on by default. The trade-off
 is that pure-CSV quirks (unescaped quotes, some malformed cells) may no
@@ -89,7 +89,7 @@ without inventing a new format.
 In strict mode the plugin installs a custom string lexer that follows
 RFC 4180:
 
-- A quoted field starts with `"` *at the beginning of a field* (i.e.
+- A quoted field starts with `"` *at the beginning of a field* (that is,
   directly after a delimiter, line break, or start of input) and
   continues until a matching `"`.
 - A literal `"` inside the field is written `""`.
@@ -105,11 +105,11 @@ one record's worth of one field. The quote character can be changed via
 When `object: true` (the default), each record is a plain
 `map[string]any`. Type-assert and read it directly, or pass it to
 `json.Marshal`. Note that Go's `json.Marshal` sorts map keys
-alphabetically — if you need to preserve column order in JSON output,
+alphabetically; if you need to preserve column order in JSON output,
 use `object: false` and emit your own JSON from the arrays.
 
 When a record has more fields than the header has names, extra columns
-are emitted under keys `field~0`, `field~1`, … — the prefix is
+are emitted under keys `field~0`, `field~1`, …; the prefix is
 configurable via `field.nonameprefix`. Missing fields take
 `field.empty`. Set `field.exact: true` to make either case an error.
 
@@ -142,7 +142,7 @@ This is useful when processing millions of records without holding them
 all in memory. To consume an arbitrarily large file, read it as a
 string (or as chunks joined into a string), and let `stream` drain the
 records into your downstream sink. The callback also receives `"error"`
-events instead of `Parse` returning the error — wrap accordingly.
+events instead of `Parse` returning the error, so wrap accordingly.
 
 ## Relationship to the grammar file
 
@@ -158,7 +158,7 @@ default alternatives for those rules to support embedded JSON values.
 Putting them in code keeps the strict and non-strict variants on the
 same path.
 
-If you want to study the grammar, read `csv-grammar.jsonic` — it is a
+If you want to study the grammar, read `csv-grammar.jsonic`; it is a
 single page of declarative rules.
 
 ## Differences from the TypeScript version
@@ -204,7 +204,7 @@ Go returns `any`, but the concrete types are predictable:
 
 A `field.exact` violation raises `csv_extra_field` / `csv_missing_field`
 (via `ctx.T0.Bad(code)`, the mirror of the TS `ctx.t0.bad(code)`) in both
-runtimes — the engine propagates a bad token's custom code rather than
+runtimes: the engine propagates a bad token's custom code rather than
 flattening it to the generic `unexpected`. The codes are asserted on both
 sides (`go/csv_test.go` `TestFieldExact` and the shared
 `test/spec/field-exact.tsv` fixture), so they cannot drift silently.
@@ -213,7 +213,7 @@ The remaining difference is cosmetic but real, and only affects the
 `field.exact` errors: Go reports the position as `-1:-1` and renders the
 hint as `Row -1 has too many fields …`, where TS reports `1:1` and
 `Row 2 …`. The `{len}` and `{fsrc}` placeholders are correct in both. The
-cause is upstream — `row` collides with a positional key the Go engine
+cause is upstream: `row` collides with a positional key the Go engine
 injects into hints itself, and the positional value wins. Do not key
 program logic off the row number in a Go `field.exact` error message; the
 `code` is reliable. See `AGENTS.md` "Known limitations".

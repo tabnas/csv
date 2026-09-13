@@ -1,4 +1,4 @@
-# @tabnas/csv — Go
+# @tabnas/csv: Go
 
 A [Jsonic](https://github.com/tabnas/jsonic) syntax plugin that parses CSV
 text into Go values, with support for headers, quoted fields, custom
@@ -38,10 +38,10 @@ result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 Full documentation, in the four [Diátaxis](https://diataxis.fr)
 quadrants:
 
-- [Tutorial](doc/tutorial.md) — a guided first parse.
-- [How-to guide](doc/guide.md) — task recipes (delimiters, headers, streaming, …).
-- [Reference](doc/reference.md) — the public API, every option, and the grammar.
-- [Concepts](doc/concepts.md) — how the plugin works, plus differences from TS.
+- [Tutorial](doc/tutorial.md). A guided first parse.
+- [How-to guide](doc/guide.md). Task recipes (delimiters, headers, streaming, …).
+- [Reference](doc/reference.md). The public API, every option, and the grammar.
+- [Concepts](doc/concepts.md). How the plugin works, plus differences from TS.
 
 For the canonical TypeScript implementation, see [`../ts/doc/`](../ts/doc/).
 

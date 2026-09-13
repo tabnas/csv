@@ -1,4 +1,4 @@
-# Tutorial — your first CSV parse (TypeScript)
+# Tutorial: your first CSV parse (TypeScript)
 
 This walks you from nothing to a working parse, then through the four
 shapes of program you are most likely to need: a basic parse, type
@@ -32,7 +32,7 @@ const parse = new Tabnas().use(jsonic).use(Csv)
 
 `parse` is now a Tabnas instance whose `.parse()` method accepts a CSV
 string and returns the parsed result. Reuse it for as many inputs as
-you need — each call is independent.
+you need; each call is independent.
 
 ## 2. Parse a two-line CSV
 
@@ -50,7 +50,7 @@ parse.parse('name,age\nAlice,30\nBob,25') // => [{ name: 'Alice', age: '30' }, {
 
 The first row was treated as a header (this is the default), and each
 subsequent row became an object keyed by those names. Note that `30`
-and `25` are *strings* — strict mode is on, and strict mode keeps every
+and `25` are *strings*: strict mode is on, and strict mode keeps every
 field as the raw text it appeared as.
 
 ## 3. Turn the numbers into numbers
@@ -69,7 +69,7 @@ const parse = new Tabnas().use(jsonic).use(Csv, { number: true, value: true })
 parse.parse('name,age,active\nAlice,30,true\nBob,25,false') // => [{ name: 'Alice', age: 30, active: true }, { name: 'Bob', age: 25, active: false }]
 ```
 
-These options are independent — turn on whichever ones the data calls
+These options are independent; turn on whichever ones the data calls
 for.
 
 ## 4. Quoted fields with commas and newlines
@@ -109,16 +109,16 @@ const parse = new Tabnas().use(jsonic).use(Csv, {
   },
 })
 
-// Parse the whole string in one shot — records flow through the
+// Parse the whole string in one shot: records flow through the
 // callback as they are produced.
 parse.parse('a,b\n1,2\n3,4')
 ```
 
-You now have the four shapes — basic parse, type coercion, quoted data,
+You now have the four shapes: basic parse, type coercion, quoted data,
 streaming. Everything else is variations on these.
 
 ## Where to go next
 
-- [How-to guide](guide.md) — focused recipes for individual tasks.
-- [Reference](reference.md) — the public API, every option, and the grammar.
-- [Concepts](concepts.md) — how the plugin works on the engine, and why.
+- [How-to guide](guide.md). Focused recipes for individual tasks.
+- [Reference](reference.md). The public API, every option, and the grammar.
+- [Concepts](concepts.md). How the plugin works on the engine, and why.

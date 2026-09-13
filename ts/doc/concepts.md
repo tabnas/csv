@@ -1,7 +1,7 @@
 # Concepts (TypeScript)
 
 Background on how the CSV plugin works, and why it is built the way it
-is. This is understanding-oriented reading — for steps see the
+is. This is understanding-oriented reading; for steps see the
 [tutorial](tutorial.md) and [how-to guide](guide.md), and for exact
 signatures see the [reference](reference.md).
 
@@ -23,8 +23,8 @@ escapes). That capability is unique to this plugin.
 The plugin does not replace the parser; it reconfigures one. When you
 write `new Tabnas().use(jsonic).use(Csv)`:
 
-1. `jsonic` installs the base relaxed-JSON grammar — the `val`, `map`,
-   `list`, `pair`, and `elem` rules — and the standard lexer matchers.
+1. `jsonic` installs the base relaxed-JSON grammar (the `val`, `map`,
+   `list`, `pair`, and `elem` rules) and the standard lexer matchers.
 2. `Csv` then layers CSV behavior on top: it adds the `csv`, `newline`,
    `record`, and `text` rules from the embedded grammar, reconfigures
    `list` / `elem` / `val` for fields, removes the `#LN` (line-end)
@@ -44,21 +44,21 @@ rule has an *open* and a *close* phase, each phase a list of
 *alternates* matching a short token pattern (at most two tokens of
 lookahead). The CSV grammar is a small ladder of rules:
 
-- `csv` — the start rule. Skips leading blank lines, then alternates
+- `csv`. The start rule. Skips leading blank lines, then alternates
   between `record` and `newline`.
-- `record` — one row. Pushes `list` to collect the fields, and closes
+- `record`. One row. Pushes `list` to collect the fields, and closes
   at a line ending or end of input.
-- `list` / `elem` / `val` — the fields of a row. `list` allocates the
+- `list` / `elem` / `val`. The fields of a row. `list` allocates the
   per-record field array; `elem` consumes one field (handling empties
   around separators); `val` resolves a field's value.
-- `text` — accumulates a run of value and whitespace tokens into one
+- `text`. Accumulates a run of value and whitespace tokens into one
   field string, applying `trim` if enabled.
-- `newline` — collapses one or more record separators between records.
+- `newline`. Collapses one or more record separators between records.
 
 The `csv`, `newline`, `record`, and `text` rules live in the shared
 `csv-grammar.jsonic` file. The `list`, `elem`, and `val` rules are
 configured *in code* (via `tn.rule(...)`) because non-strict mode must
-preserve jsonic's default alternatives for those rules — see
+preserve jsonic's default alternatives for those rules; see
 [Relationship to the grammar file](#relationship-to-the-grammar-file).
 
 ## Strict vs non-strict mode
@@ -86,7 +86,7 @@ without inventing a new format.
 In strict mode the plugin installs a custom string matcher that follows
 RFC 4180:
 
-- A quoted field starts with `"` *at the beginning of a field* (i.e.
+- A quoted field starts with `"` *at the beginning of a field* (that is,
   directly after a delimiter, line break, or start of input) and
   continues until a matching `"`.
 - A literal `"` inside the field is written `""`.
@@ -146,7 +146,7 @@ This is useful when you want to process millions of records without
 holding them all in memory at once. To consume an arbitrarily large
 file, read it as a string (or as chunks joined into a string), and let
 `stream` drain the records into your downstream sink. The callback also
-receives `'error'` events instead of the parser throwing — wrap
+receives `'error'` events instead of the parser throwing, so wrap
 accordingly.
 
 ## Accepted vs rejected edge cases
@@ -157,12 +157,12 @@ A few cases are worth calling out because they trip up CSV users:
   CRLF endings: `'\r\n\r\na,b\r\nA,B\r\n\r\n'` parses to a single
   record `[{ a: 'A', b: 'B' }]`.
 - **Empty fields** are real fields: `'a\n1,'` yields
-  `[{ a: '1', 'field~1': '' }]` — the trailing comma created a second,
+  `[{ a: '1', 'field~1': '' }]` : the trailing comma created a second,
   empty field.
 - **Unbalanced quotes** are rejected: a quoted field with no closing
   quote raises `unterminated_string`.
 - **Trailing junk after a non-strict value** is rejected: in non-strict
-  mode `parse.parse('a\n{x:1}y')` throws `unexpected` — the `{x:1}`
+  mode `parse.parse('a\n{x:1}y')` throws `unexpected`: the `{x:1}`
   parses, but the trailing `y` matches no alternate.
 
 ## Relationship to the grammar file
@@ -179,5 +179,5 @@ default alternatives for those rules in order to support embedded JSON.
 Putting them in code keeps the strict and non-strict variants on the
 same path.
 
-If you want to study the grammar, read `csv-grammar.jsonic` — it is a
+If you want to study the grammar, read `csv-grammar.jsonic`; it is a
 single page of declarative rules.
