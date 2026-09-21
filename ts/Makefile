@@ -8,7 +8,8 @@ test: test-ts test-go test-rs
 
 clean: clean-ts clean-go clean-rs
 
-# Embed csv-grammar.jsonic into src/csv.ts and ../go/csv.go.
+# Embed csv-grammar.jsonic into src/csv.ts, ../go/csv.go and
+# ../rs/src/lib.rs.
 embed:
 	node embed-grammar.js
 
@@ -33,7 +34,14 @@ clean-go:
 	cd ../go && go clean -cache
 
 # Rust (the crate in ../rs; the engine is a sibling checkout)
-build-rs:
+#
+# `embed` first, as build-go has it and as npm's own `build` script gives
+# build-ts. rs/src/lib.rs carries the grammar as GRAMMAR_TEXT, the same
+# jsonic text the other two embed, and the crate parses it at load; so
+# without this, a focused build after an edit to ../csv-grammar.jsonic
+# compiles the previous text and succeeds. The drift tripwire is a test,
+# and a build target does not run it.
+build-rs: embed
 	cd ../rs && cargo build --all-targets
 
 test-rs:

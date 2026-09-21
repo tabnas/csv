@@ -4,7 +4,7 @@
 # Local build/test resolve the unpublished @tabnas siblings via the
 # repo-set go.work + node_modules symlinks (admin/scripts/link.sh).
 
-.PHONY: all build test clean build-ts build-go build-rs test-ts test-go test-rs \
+.PHONY: all build test clean embed build-ts build-go build-rs test-ts test-go test-rs \
         clean-ts clean-go clean-rs publish-ts publish-go version-rs tags-go reset \
         prose prose-counts
 
@@ -15,6 +15,14 @@ build: build-ts build-go build-rs
 test: test-ts test-go test-rs
 
 clean: clean-ts clean-go clean-rs
+
+# --- The embedded grammar ---
+# Write csv-grammar.jsonic into ts/src/csv.ts, go/csv.go and
+# rs/src/lib.rs. All three hold the same jsonic TEXT and parse it with
+# their own jsonic at load, so the embed is what keeps them one grammar.
+# Never hand-edit between the BEGIN/END EMBEDDED markers.
+embed:
+	cd ts && node embed-grammar.js
 
 # --- TypeScript (package in ts/) ---
 build-ts:
@@ -54,7 +62,14 @@ publish-go: test-go
 	@command -v gh >/dev/null 2>&1 && gh release create go/v$(V) --title "go/v$(V)" --notes "Go module release v$(V)" || true
 
 # --- Rust (crate in rs/) ---
-build-rs:
+#
+# `embed` first, the same ordering ts/Makefile gives build-rs and build-go
+# and that npm's own `build` script gives build-ts. rs/src/lib.rs carries
+# the grammar as GRAMMAR_TEXT, the same jsonic text the other two embed,
+# and the crate parses it at load; so without this, a focused build after
+# an edit to csv-grammar.jsonic compiles the previous text and succeeds.
+# The drift tripwire is a test, and a build target does not run it.
+build-rs: embed
 	cd rs && cargo build --all-targets
 
 # `--all-targets` excludes the doctests, and the README's examples are
