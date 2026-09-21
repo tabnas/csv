@@ -543,18 +543,27 @@ fn token_text(token: &Token) -> String {
 /// it refuses the document; `DIVERGENCE.md` records that choice.
 ///
 /// That holds for a PARSED object. An object supplied as an OPTION value
-/// is the case this function cannot see: the canonical's option merge
-/// rebuilds a plain source object onto `Object.prototype` on the way into
-/// the bag, so `String` names the column `[object Object]` there and
-/// nothing throws, even for one the caller made with
-/// `Object.create(null)`. This function is handed a cell, not its
-/// provenance, so it refuses that one too. `DIVERGENCE.md` measures both.
+/// is the other case, and the canonical answers it differently: the
+/// option merge rebuilds a plain source object onto `Object.prototype` on
+/// the way into the bag, so `String` names the column `[object Object]`
+/// there and nothing throws, even for one the caller made with
+/// `Object.create(null)`.
 ///
-/// Falling through to [`value_text`] is what made that necessary: its
-/// last-resort arm renders the value as JSON, which named the column
-/// `{"x":1.0}` for `{x:1}` and `[1.0,2.0]` for `[1,2]`, neither of which
-/// the canonical runtime produces for any input.
-fn key_text(value: &Value) -> Option<String> {
+/// `from_option` is which of the two this cell is, and the caller knows
+/// because there is exactly one option that can put a value in a header
+/// row: `field.empty`, dropped into a syntactically empty cell before any
+/// rule runs, so `,a` under `{field: {empty: <value>}}` takes its first
+/// column name from it. The flag is set where the options are READ rather
+/// than guessed from the value, because a `Value::Object` is the same
+/// type either way, and it travels INTO [`join_text`], so an object
+/// nested in an option array is answered the same as one at the top.
+///
+/// Falling through to [`value_text`] is what made the refusal necessary
+/// in the first place: its last-resort arm renders the value as JSON,
+/// which named the column `{"x":1.0}` for `{x:1}` and `[1.0,2.0]` for
+/// `[1,2]`, neither of which the canonical runtime produces for any
+/// input.
+fn key_text(value: &Value, from_option: bool) -> Option<String> {
     match value {
         Value::Undefined
         | Value::Null
@@ -562,10 +571,25 @@ fn key_text(value: &Value) -> Option<String> {
         | Value::Number(_)
         | Value::String(_)
         | Value::Text(_) => Some(value_text(value)),
-        Value::Array(items) => join_text(items),
-        // An object, and the two reference wrappers the engine keeps for
-        // its own bookkeeping, have no ToString to apply.
+        Value::Array(items) => join_text(items, from_option),
+        Value::Object(_) if from_option => Some("[object Object]".to_string()),
+        // A PARSED object, and the two reference wrappers the engine keeps
+        // for its own bookkeeping, have no ToString to apply.
         _ => None,
+    }
+}
+
+/// Whether two values are the SAME container, rather than two containers
+/// that compare equal. It is how a cell is recognised as the one
+/// `field.empty` supplied: an option value is cloned into the cell, and a
+/// clone of a container is a refcount bump on the same allocation, while
+/// the parser allocates its own. Equality would not do, because a parsed
+/// `{q:1}` equals an option `{q:1}` and only one of them may be named.
+fn same_container(value: &Value, other: &Value) -> bool {
+    match (value, other) {
+        (Value::Object(left), Value::Object(right)) => Arc::ptr_eq(left, right),
+        (Value::Array(left), Value::Array(right)) => Arc::ptr_eq(left, right),
+        _ => false,
     }
 }
 
@@ -585,7 +609,20 @@ fn key_text(value: &Value) -> Option<String> {
 /// its own array and the walk always terminates. Its depth is the
 /// document's bracket nesting, which `tabnas-jsonic` already bounds at
 /// 127 containers with the parse budget this plugin inherits.
-fn join_text(items: &[Value]) -> Option<String> {
+///
+/// An OPTION value does reach this, through `field.empty`, and it cannot
+/// contain itself either, which is where the Go port differs.
+/// `field.empty` is a `serde_json::Value` and `field.names` a
+/// `Vec<String>`, both owned acyclic trees. The engine's own `Value`
+/// shares containers behind an `Arc`, but building a cycle out of one
+/// needs a second handle on a container while its refcount is still 1,
+/// which the type does not allow. Go's option is an unconstrained `any`,
+/// a caller can spell `a := make([]any, 1); a[0] = a`, and there the same
+/// walk had to be bounded.
+///
+/// `from_option` travels from [`key_text`], so an object nested in an
+/// option array is named `[object Object]` where a parsed one refuses.
+fn join_text(items: &[Value], from_option: bool) -> Option<String> {
     let mut joined = String::new();
     for (index, item) in items.iter().enumerate() {
         if 0 < index {
@@ -593,7 +630,7 @@ fn join_text(items: &[Value]) -> Option<String> {
         }
         match item {
             Value::Null | Value::Undefined => {}
-            other => joined.push_str(&key_text(other)?),
+            other => joined.push_str(&key_text(other, from_option)?),
         }
     }
     Some(joined)
@@ -745,15 +782,24 @@ fn record_before_close(
         // holds `ctx.u.fields`, because a cell becomes a column NAME only
         // where an object record is built. `field.names` widens into the
         // same shape so the two sources stay interchangeable.
-        let fields: Option<Vec<Value>> = match context.u.get("fields") {
-            Some(Value::Array(names)) => Some(names.as_ref().clone()),
-            _ => settings.names.as_ref().map(|names| {
-                names
-                    .iter()
-                    .map(|name| Value::String(name.clone()))
-                    .collect()
-            }),
-        };
+        // `fields_from_options` is the provenance of the WHOLE list: a
+        // header row is parsed, `field.names` is an option. A parsed
+        // header row can still hold an option value, because `field.empty`
+        // is dropped into an empty cell before any rule runs, so the flag
+        // is taken per cell below as well.
+        let (fields, fields_from_options): (Option<Vec<Value>>, bool) =
+            match context.u.get("fields") {
+                Some(Value::Array(names)) => (Some(names.as_ref().clone()), false),
+                _ => (
+                    settings.names.as_ref().map(|names| {
+                        names
+                            .iter()
+                            .map(|name| Value::String(name.clone()))
+                            .collect()
+                    }),
+                    true,
+                ),
+            };
 
         if record_i == 0 && settings.header {
             // Kept exactly as parsed, which is what the canonical keeps:
@@ -812,10 +858,10 @@ fn record_before_close(
                         // raw cell through ToPropertyKey, which for
                         // anything but a symbol is ToString.
                         //
-                        // An OBJECT has no ToString at all, and the
-                        // canonical runtime throws a TypeError here rather
-                        // than naming the column. This port cannot raise
-                        // one, so it refuses the document with the
+                        // A PARSED object has no ToString at all, and
+                        // the canonical runtime throws a TypeError here
+                        // rather than naming the column. This port cannot
+                        // raise one, so it refuses the document with the
                         // engine's inherited `unexpected` code instead of
                         // inventing a name; `DIVERGENCE.md` records that
                         // choice. Refusing at the header row instead was
@@ -823,7 +869,15 @@ fn record_before_close(
                         // parse and a header-only document, neither of
                         // which ever asks for a name, and both of which
                         // the canonical returns a value for.
-                        let Some(name) = key_text(cell) else {
+                        //
+                        // An object an OPTION supplied is named
+                        // `[object Object]`, which is what the canonical
+                        // does for it, and `from_option` is how the two
+                        // are told apart. The type cannot tell them
+                        // apart: both are `Value::Object`.
+                        let from_option =
+                            fields_from_options || same_container(cell, &settings.empty);
+                        let Some(name) = key_text(cell, from_option) else {
                             let mut token = context.t0().cloned().unwrap_or_else(|| {
                                 Token::new("#BD", TIN_BD, Value::Undefined, "", Default::default())
                             });

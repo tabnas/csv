@@ -556,29 +556,74 @@ fn field_empty_names_a_column_from_an_option_value() {
 // canonical does NOT throw. The option merge rebuilds a plain source
 // object onto `Object.prototype` on the way into the bag, so `String`
 // gives it "[object Object]" whatever the caller wrote, an object made
-// with `Object.create(null)` included; that is measured in
-// `DIVERGENCE.md`. A PARSED cell is allocated with a null prototype and
-// inherits no `toString` at all, which is what throws. This port refuses
-// both, which is a PORT DEFECT and not an impossibility: the Go port now
-// answers the option route exactly as the canonical does, by reading the
-// provenance off the value's type, and nothing measured says this port
-// could not do the same. An earlier comment here claimed the two were
-// indistinguishable "since a cell is a cell by the time the name is
-// taken"; that claim was wrong and `DIVERGENCE.md` no longer makes it.
-// This test pins TODAY'S behaviour so the repair is a deliberate change.
+// with `Object.create(null)` included. A PARSED cell is allocated with a
+// null prototype and inherits no `toString` at all, which is what throws.
+//
+// This port refused BOTH until now, which was a port defect and not an
+// impossibility. What separates the two is PROVENANCE, and provenance is
+// not on the value: an option object and a parsed object are both
+// `Value::Object`. It is taken where the options are READ instead, and
+// carried to the name site, which is what `from_option` is. Every
+// expectation below is the canonical runtime's own output, measured on
+// 2026-09-21.
 //
 // `field.empty` reaches this in the DEFAULT mode, because the value is
 // dropped into a syntactically empty cell before any rule runs. It is the
 // one route by which the object divergence is not bounded by strict mode.
 #[test]
-fn an_object_option_value_refuses_where_the_canonical_names_the_column() {
-    for empty in [json!({"q": 1}), json!([{"q": 1}])] {
+fn an_object_option_value_names_the_column_as_the_canonical_does() {
+    for empty in [json!({"q": 1}), json!({}), json!([{"q": 1}]), json!([{}])] {
         assert_eq!(
-            code_of(",a\nx,y", json!({"field": {"empty": empty}})),
-            "unexpected",
+            must(",a\nx,y", json!({"field": {"empty": empty}})),
+            json!([{"[object Object]": "x", "a": "y"}]),
             "{empty}"
         );
     }
+    // Non-strict, where a parsed object could also reach the name site,
+    // and does not in this document.
+    assert_eq!(
+        must(",a\nq,r", json!({"strict": false, "field": {"empty": {}}})),
+        json!([{"[object Object]": "q", "a": "r"}])
+    );
+}
+
+// The bound on the fix above, asserted so it fails on over-reach as
+// loudly as on regression. A PARSED object still refuses, and it refuses
+// in the very parse where an option object names the column beside it: if
+// provenance were read off the value again, the first case here would
+// start naming a column the canonical throws on. The canonical throws
+// `TypeError: Cannot convert object to primitive value` for it.
+//
+// The last two are the value route rather than the name route. An option
+// object that never names a column is a cell value like any other, and
+// the canonical returns it.
+#[test]
+fn a_parsed_object_is_refused_beside_an_option_object() {
+    assert_eq!(
+        code_of(
+            ",{x:1}\nq,r",
+            json!({"strict": false, "field": {"empty": {}}})
+        ),
+        "unexpected"
+    );
+    // And when the parsed object EQUALS the option object. Provenance is
+    // the allocation, not the contents: an option `{x:1}` compares equal
+    // to a parsed `{x:1}`, and only one of them may be named.
+    assert_eq!(
+        code_of(
+            ",{x:1}\nq,r",
+            json!({"strict": false, "field": {"empty": {"x": 1}}})
+        ),
+        "unexpected"
+    );
+    assert_eq!(
+        must(",a\nx,y", json!({"object": false, "field": {"empty": {}}})),
+        json!([["x", "y"]])
+    );
+    assert_eq!(
+        must("h1,h2\nx,", json!({"field": {"empty": {}}})),
+        json!([{"h1": "x", "h2": {}}])
+    );
 }
 
 // `field.names` is the other source of a field list. The canonical takes

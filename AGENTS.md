@@ -246,13 +246,22 @@ column `[object Object]` there rather than throwing — because the option
 merge rebuilds a plain source object onto `Object.prototype`, even one
 the caller made with `Object.create(null)`, while a parsed cell keeps the
 null prototype the engine gives it and inherits no `toString` at all.
-`DIVERGENCE.md` measures that route beside this one. **The Go port now
-answers the option route exactly as the canonical does**, because the two
-routes have different Go TYPES: the lexer allocates a parsed object as
-`*jsonic.OrderedMap`, while an option value stays the `map[string]any`
-the caller wrote. An earlier entry claimed no port could tell them apart;
-that was wrong and has been removed. Only Rust still refuses there, and
-that is a port defect to repair, not an impossibility.
+`DIVERGENCE.md` measures that route beside this one. **Both ports now
+answer the option route exactly as the canonical does**, and what tells
+the two routes apart is PROVENANCE, recorded where the options are READ.
+It is not readable from the value's type in either port, and two earlier
+rounds got that wrong in opposite directions. The first recorded the
+option route as unrefusable. The second refuted it with `%T`, on the
+claim that a parsed object is `*jsonic.OrderedMap` while an option object
+stays the `map[string]any` the caller wrote — but `OrderedMap` is a
+PUBLIC type with a public constructor, so `field.empty:
+jsonic.NewOrderedMap()` is an option value of exactly the type the lexer
+builds, and it was refused where the canonical names the column. Go now
+walks the option bag in `tagOptions` and records the identity of every
+object in it; Rust carries the same thing as a `from_option` flag from
+the one place `field.empty` is read. A Go map still settles it by type,
+because the lexer has no way to build one. Only `field.names` in Rust
+still refuses a non-string element, and `DIVERGENCE.md` carries why.
 
 - **`field.exact` error *code* (Go) — FIXED, do not re-add the workaround.**
   This used to be listed here because `jsonic/go` surfaced every
@@ -263,6 +272,76 @@ that is a port defect to repair, not an impossibility.
   `go/csv_test.go` `TestFieldExact` checks the exact code via
   `assertErrCode`, and `test/spec/field-exact.tsv` pins
   `ERROR:csv_extra_field` / `ERROR:csv_missing_field` for both runtimes.
+
+- **A self-referential option value (Go) — the plugin refuses it; the
+  engine cannot.** `field.empty` and `field.names` are `any` in Go, so a
+  caller can spell a value that contains itself: `a := make([]any, 1);
+  a[0] = a`. MEASURED on 2026-09-21: the canonical throws `RangeError:
+  Maximum call stack size exceeded` out of `.use(Csv, opts)` for every
+  such value, array or object, at any depth, because the engine
+  deep-copies the option bag before the plugin runs. It never reaches
+  `Array.prototype.join`, whose own cycle guard would render the
+  recursive occurrence as an empty segment, so there is no canonical
+  column name for a cycle. `go/csv.go` refuses the configuration from the
+  same call, with `ErrCyclicOption`, pinned by
+  `TestASelfReferentialOptionValueIsRefusedWhereTheOptionsAreRead` in
+  [`go/js_key_test.go`](go/js_key_test.go).
+
+  What the plugin cannot reach is the engine's own copy. `deepClone` in
+  `parser/go` (`utility.go`) recurses through `[]any`, `map[string]any`
+  and `*OrderedMap` with no cycle guard, so a cycle spelled with one of
+  those three takes the PROCESS down — a Go stack overflow is fatal and
+  uncatchable — before `Csv` is called at all. That is an engine defect
+  to report upstream, not something to patch around here; the plugin's
+  guard covers every other Go container, which is where a cycle can still
+  arrive intact. Rust cannot express the input at all: `field.empty` is a
+  `serde_json::Value` and `field.names` a `Vec<String>`, both owned
+  acyclic trees.
+
+- **A nested option map spelled with a DECLARED Go type loses the
+  defaults it does not set.** `go/csv.go` reads `field`, `record` and
+  `string` through `asOptionMap` now, so `field: Field{"nonameprefix":
+  "F"}` where `type Field map[string]any` no longer drops every option
+  inside it. What it cannot repair is the MERGE that runs before the
+  plugin: `deepMerge` in `parser/go` (`utility.go`) finds a map through
+  `mapish`, which knows `map[string]any`, `*OrderedMap` and `MapRef` and
+  nothing else, so a declared map type REPLACES the defaults instead of
+  merging onto them. For most keys that is invisible, because `csv.go`
+  re-supplies the same fallback itself (`field.empty` is `""`,
+  `field.names` is absent, `field.exact` is off). `string.quote` is the
+  one with a default `csv.go` does not re-supply, measured on 2026-09-21
+  on `parse("a,b\n\"x y\",z", {string: {csv: true}})`:
+
+  | how `string` is spelled | TS (canonical) | Go |
+  |---|---|---|
+  | `map[string]any{"csv": true}` | `{"a":"x y","b":"z"}` | the same |
+  | `Field{"csv": true}` | `{"a":"x y","b":"z"}` | `{"a":"\"x y\"","b":"z"}` |
+
+  Do not paper over it by defaulting `quote` inside `csv.go`. That hides
+  a merge inconsistency every other plugin with nested options will hit,
+  and it belongs upstream in `parser/go` beside the `deepClone` cycle
+  guard.
+
+- **JavaScript's `+` on a non-string `field.nonameprefix` (both ports).**
+  Still open. The canonical builds a no-name column with
+  `options.field.nonameprefix + i`, which is the JavaScript `+` operator:
+  string concatenation for a string, and NUMERIC ADDITION for anything
+  else. Measured on 2026-09-21 on `parse("1,2", {header: false})`:
+
+  | `field.nonameprefix` | TS (canonical) | Go | Rust |
+  |---|---|---|---|
+  | `"F"` | `F0`, `F1` | the same | the same |
+  | `5` | `5`, `6` | `0`, `1` | no such spelling |
+  | `null` | `0`, `1` | `0`, `1` | no such spelling |
+  | `true` | `1`, `2` | `0`, `1` | no such spelling |
+
+  A DECLARED string type (`type Sep string`) is read correctly now, in Go
+  and everywhere else an option is a string: that is the same string to
+  JavaScript, and it is fixed. A value of another KIND is not coerced,
+  because neither port implements the `+` operator. Rust types the option
+  `String`, so only Go can be handed one. Fixing it means spelling out
+  ToPrimitive and ToNumber for the option vocabulary; until then this is
+  a gap, not a divergence entry, because it is repairable.
 
 - **`field.exact` error *position* and the `{row}` hint (Go).** Still open,
   and engine-side — not something to patch around in this repo. The `code`

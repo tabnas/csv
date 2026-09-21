@@ -100,6 +100,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	}
 	j.Decorate("csv-init", true)
 
+	// READ THE OPTION BAG'S PROVENANCE ONCE, HERE, where the options are
+	// read. tagOptions walks the bag and records the identity of every
+	// OBJECT in it, because a Go type cannot say where an object came
+	// from, and refuses a value that contains itself. Nothing in the bag
+	// is rewritten: the values a caller supplied reach the records
+	// unchanged.
+	optionObjects, err := tagOptions(options)
+	if err != nil {
+		return err
+	}
+
 	strict := toBool(options["strict"])
 	objres := toBool(options["object"])
 	header := toBool(options["header"])
@@ -109,17 +120,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	opt_number := toBool(options["number"])
 	opt_value := toBool(options["value"])
 
-	fieldOpts, _ := options["field"].(map[string]any)
-	recordOpts, _ := options["record"].(map[string]any)
-	stringOpts, _ := options["string"].(map[string]any)
+	fieldOpts := asOptionMap(options["field"])
+	recordOpts := asOptionMap(options["record"])
+	stringOpts := asOptionMap(options["string"])
 
 	record_empty := toBool(recordOpts["empty"])
 
-	stream, _ := options["stream"].(func(string, any))
+	stream := toStream(options["stream"])
 
 	// In strict mode, Jsonic field content is not parsed.
 	if strict {
-		if stringOpts["csv"] != false {
+		if !isFalse(stringOpts["csv"]) {
 			j.SetOptions(jsonic.Options{Lex: &jsonic.LexOptions{
 				Match: map[string]*jsonic.MatchSpec{
 					"stringcsv": {Order: 1e5, Make: BuildCsvStringMatcher(stringOpts)},
@@ -129,7 +140,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		j.SetOptions(jsonic.Options{Rule: &jsonic.RuleOptions{Exclude: "jsonic,imp"}})
 	} else {
 		// Fields may contain Jsonic content.
-		if stringOpts["csv"] == true {
+		if isTrue(stringOpts["csv"]) {
 			j.SetOptions(jsonic.Options{Lex: &jsonic.LexOptions{
 				Match: map[string]*jsonic.MatchSpec{
 					"stringcsv": {Order: 1e5, Make: BuildCsvStringMatcher(stringOpts)},
@@ -173,7 +184,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 
 	if strict {
 		csvStringOpt := stringOpts["csv"]
-		if csvStringOpt == nil || csvStringOpt == true {
+		if csvStringOpt == nil || isTrue(csvStringOpt) {
 			jsonicOptions.String = &jsonic.StringOptions{
 				Lex:   boolPtr(false),
 				Chars: "",
@@ -361,7 +372,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 							// header-only document, neither of which ever
 							// asks for a name, and both of which the
 							// canonical returns a value for.
-							name, nameOk := jsKey(fields[fI])
+							name, nameOk := jsKey(fields[fI], optionObjects)
 							if !nameOk {
 								if ctx.T0 != nil {
 									ctx.ParseErr = ctx.T0.Bad("unexpected", nil)
@@ -1023,14 +1034,304 @@ func toPlainMap(m map[string]any) map[string]any {
 	return out
 }
 
-func toBool(v any) bool {
-	b, _ := v.(bool)
-	return b
+// optionObjects is the set of OBJECTS an option supplied, held by
+// identity. It is the provenance record tagOptions builds and jsKey
+// consults, and it exists because the Go TYPE of an object does not say
+// where the object came from: the lexer allocates a parsed object as
+// *jsonic.OrderedMap, but OrderedMap is a PUBLIC type with a public
+// constructor, so `field.empty: jsonic.NewOrderedMap()` is an OPTION
+// value of exactly the type the lexer builds. An earlier round asserted
+// that `%T` proved provenance and DIVERGENCE.md said so; measured on
+// 2026-09-21, that was wrong, and the option object was refused where
+// the canonical names the column "[object Object]".
+//
+// A Go map needs no entry here, because the lexer has no way to build
+// one: there the type IS the provenance.
+type optionObjects map[*jsonic.OrderedMap]struct{}
+
+// optionRef identifies a container by the allocation it refers to, so a
+// value that contains ITSELF is recognised rather than walked forever.
+// The length is part of the key because two slices can share one data
+// pointer: `a[:1]` and `a[:2]` are different nodes, and only a walk that
+// re-enters the SAME header has found a cycle.
+type optionRef struct {
+	kind reflect.Kind
+	ptr  uintptr
+	len  int
 }
 
+func optionRefOf(rv reflect.Value) (optionRef, bool) {
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Map, reflect.Pointer:
+		if rv.IsNil() {
+			return optionRef{}, false
+		}
+		ref := optionRef{kind: rv.Kind(), ptr: rv.Pointer()}
+		if rv.Kind() == reflect.Slice {
+			ref.len = rv.Len()
+		}
+		return ref, true
+	}
+	return optionRef{}, false
+}
+
+// ErrCyclicOption refuses a configuration no runtime can name a column
+// from. MEASURED on 2026-09-21: the canonical throws
+// `RangeError: Maximum call stack size exceeded` out of
+// `.use(Csv, opts)` for EVERY self-referential option value -- through an
+// array, through an object, at depth 1 and nested deeper -- because the
+// engine deep-copies the option bag before the plugin ever sees it. It
+// never reaches `Array.prototype.join`, whose own cycle guard would have
+// rendered the recursive occurrence as an empty segment, so there is no
+// canonical column name for a cycle to be given.
+//
+// Go's engine copies the bag the same way and dies at the same site, but
+// a Go stack overflow is FATAL and uncatchable, so it takes the process
+// with it. That is a defect of `deepClone` in `tabnas/parser/go`, which
+// has no cycle guard, and it is reachable only for the containers that
+// function recurses into: []any, map[string]any and *OrderedMap. A cycle
+// sheltered under any OTHER Go container -- a declared slice type, a
+// declared map type, a fixed-size array -- is passed through untouched
+// and arrives here intact. This is where it stops: the plugin refuses the
+// configuration from the same call the canonical throws out of, rather
+// than aborting the process later, in the middle of naming a column.
+var ErrCyclicOption = fmt.Errorf(
+	"csv: an option value contains itself, so no column name can be taken from it")
+
+// tagOptions walks the option bag once, at the point the options are
+// read, and returns the identity of every object in it.
+//
+// It rewrites NOTHING. A value a caller supplied for `field.empty` is
+// dropped into an empty cell and reaches the caller again in the record,
+// so this port hands it back exactly as it was given, down to its Go
+// type. What the walk establishes is the two things a later site cannot
+// work out for itself:
+//
+//   - PROVENANCE. An object is named "[object Object]" when an option
+//     supplied it and refuses the document when the lexer built it, and
+//     both are *jsonic.OrderedMap. See optionObjects.
+//   - TERMINATION. A self-referential option value is refused here
+//     rather than walked forever at the name site. See ErrCyclicOption.
+//
+// Containers are walked; everything else is left alone. That is enough,
+// because an object or an array is the only thing either question can be
+// asked about.
+func tagOptions(options map[string]any) (optionObjects, error) {
+	objects := optionObjects{}
+	if err := tagOptionValue(options, objects, map[optionRef]struct{}{}); err != nil {
+		return nil, err
+	}
+	return objects, nil
+}
+
+func tagOptionValue(val any, objects optionObjects, path map[optionRef]struct{}) error {
+	if val == nil {
+		return nil
+	}
+	rv := reflect.ValueOf(val)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map, reflect.Pointer:
+	default:
+		// A string, a number, a bool, a function, a channel, a struct:
+		// nothing jsKey looks inside, so nothing a name can be taken
+		// from, and nothing that can hold a reference back to itself
+		// without one of the kinds above on the way. The `OrderedMap`
+		// VALUE form is a struct, and jsKey names it "[object Object]"
+		// without reading a key of it.
+		return nil
+	}
+
+	if ref, tracked := optionRefOf(rv); tracked {
+		if _, cycling := path[ref]; cycling {
+			return ErrCyclicOption
+		}
+		path[ref] = struct{}{}
+		defer delete(path, ref)
+	}
+
+	if om, isObject := asOrderedMap(val); isObject {
+		objects[om] = struct{}{}
+		for _, k := range om.Keys {
+			if err := tagOptionValue(om.Vals[k], objects, path); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < rv.Len(); i++ {
+			if err := tagOptionValue(rv.Index(i).Interface(), objects, path); err != nil {
+				return err
+			}
+		}
+	case reflect.Map:
+		iter := rv.MapRange()
+		for iter.Next() {
+			if err := tagOptionValue(iter.Value().Interface(), objects, path); err != nil {
+				return err
+			}
+		}
+	}
+	// A pointer to anything but an OrderedMap has no JavaScript spelling:
+	// jsKey refuses it without looking inside, so there is nothing here
+	// to walk either.
+	return nil
+}
+
+// asOrderedMap is the POINTER form alone, which is the only object form
+// whose provenance is in doubt: the lexer allocates one, and so can a
+// caller through the public jsonic.NewOrderedMap. It is what an entry in
+// optionObjects is keyed by.
+//
+// The VALUE form, `jsonic.OrderedMap{...}`, is deliberately not here.
+// Taking its address copies it to the heap, so it would be a different
+// object every time it was asked for and a tag on it would not carry;
+// and it needs no tag, because the lexer cannot produce one. jsKey
+// answers that form by its type.
+func asOrderedMap(val any) (*jsonic.OrderedMap, bool) {
+	if m, ok := val.(*jsonic.OrderedMap); ok && m != nil {
+		return m, true
+	}
+	return nil, false
+}
+
+// asOptionMap reads one of the nested option maps -- `field`, `record`,
+// `string` -- whatever a caller spelled it as. A type assertion on
+// `map[string]any` alone dropped a declared map type
+// (`type Field map[string]any`), and with it EVERY option inside it,
+// silently: `field: Field{"nonameprefix": "F"}` named the columns "0"
+// and "1".
+//
+// The returned map is only ever read from, so a converted copy is as good
+// as the original. A nil result reads as an absent option throughout,
+// which is what an absent map should do.
+func asOptionMap(val any) map[string]any {
+	switch m := val.(type) {
+	case nil:
+		return nil
+	case map[string]any:
+		return m
+	case *jsonic.OrderedMap:
+		if m == nil {
+			return nil
+		}
+		return m.Vals
+	case jsonic.OrderedMap:
+		return m.Vals
+	}
+	rv := reflect.ValueOf(val)
+	if rv.Kind() != reflect.Map || rv.Type().Key().Kind() != reflect.String {
+		return nil
+	}
+	out := make(map[string]any, rv.Len())
+	iter := rv.MapRange()
+	for iter.Next() {
+		out[iter.Key().String()] = iter.Value().Interface()
+	}
+	return out
+}
+
+// isTrue and isFalse are JavaScript's `===` against a boolean literal,
+// which is how the canonical tests `string.csv`:
+// `false !== options.string.csv` turns the CSV string matcher on in
+// strict mode, and `true === options.string.csv` turns it on outside
+// strict mode. Nothing but a boolean satisfies either, so `csv: 0` is
+// NOT `false` and `csv: 1` is NOT `true`, which is what the comparisons
+// below say. A declared bool type is the same boolean to JavaScript, so
+// the kind decides rather than the type.
+func isTrue(v any) bool {
+	b, ok := jsBool(v)
+	return ok && b
+}
+
+func isFalse(v any) bool {
+	b, ok := jsBool(v)
+	return ok && !b
+}
+
+func jsBool(v any) (bool, bool) {
+	if b, ok := v.(bool); ok {
+		return b, true
+	}
+	rv := reflect.ValueOf(v)
+	if rv.IsValid() && rv.Kind() == reflect.Bool {
+		return rv.Bool(), true
+	}
+	return false, false
+}
+
+// toBool is JavaScript's `!!x`, which is how the canonical reads every
+// boolean option it has: `const strict = !!options.strict`,
+// `!!options.record?.empty`, and `options.field.exact && ...`. Falsy is
+// undefined, null, false, zero, NaN and the empty string; everything
+// else -- an empty array, an empty object, the string "false" -- is true.
+//
+// A type assertion on `bool` read all of those as false, so a caller who
+// wrote `field.exact: 1` got a documented option that silently did
+// nothing where the canonical raises csv_extra_field, and one who wrote a
+// declared bool type (`type Flag bool`) got `strict: Flag(true)` read as
+// NON-strict, which changes how every field in the document is lexed.
+func toBool(v any) bool {
+	if v == nil {
+		return false
+	}
+	if b, ok := jsBool(v); ok {
+		return b
+	}
+	if f, ok := jsNumber(v); ok {
+		return f != 0 && !math.IsNaN(f)
+	}
+	if s, ok := jsString(v); ok {
+		return s != ""
+	}
+	return true
+}
+
+// toString reads a STRING option: `field.nonameprefix`,
+// `field.separation`, `record.separators` and `string.quote`. A declared
+// string type (`type Sep string`) is the same string to JavaScript, so
+// the kind decides rather than the type; an exact-type assertion read
+// `field.separation: Sep(";")` as ABSENT and left the whole line as one
+// field.
+//
+// A value of some OTHER kind is not coerced here. The canonical builds a
+// no-name column with JavaScript's `+`, which does numeric addition for a
+// number and string concatenation otherwise, and this port does not
+// implement that operator; AGENTS.md records what that leaves open.
 func toString(v any) string {
-	s, _ := v.(string)
+	s, _ := jsString(v)
 	return s
+}
+
+func jsString(v any) (string, bool) {
+	if s, ok := v.(string); ok {
+		return s, true
+	}
+	rv := reflect.ValueOf(v)
+	if rv.IsValid() && rv.Kind() == reflect.String {
+		return rv.String(), true
+	}
+	return "", false
+}
+
+// toStream reads the `stream` callback. A DECLARED function type
+// (`type Sink func(string, any)`) has the same signature and a different
+// dynamic type, and a type assertion dropped it, which turned streaming
+// silently off: the parse then built and returned the records the caller
+// asked to have streamed, and the callback never fired.
+func toStream(v any) func(string, any) {
+	if s, ok := v.(func(string, any)); ok {
+		return s
+	}
+	rv := reflect.ValueOf(v)
+	want := reflect.TypeOf((func(string, any))(nil))
+	if rv.IsValid() && rv.Kind() == reflect.Func && rv.Type().ConvertibleTo(want) {
+		s, _ := rv.Convert(want).Interface().(func(string, any))
+		return s
+	}
+	return nil
 }
 
 func boolPtr(b bool) *bool {
@@ -1058,19 +1359,26 @@ func boolPtr(b bool) *bool {
 // canonical answers it differently: the option merge rebuilds a plain
 // source object onto Object.prototype on the way into the bag, so String
 // names the column "[object Object]" there and nothing throws, even for
-// one the caller made with Object.create(null). This function CAN see
-// which is which, because the two arrive as different Go types: the
-// lexer builds *jsonic.OrderedMap, an option value stays the
-// map[string]any the caller wrote. An earlier version of this comment
-// said the provenance was invisible here and DIVERGENCE.md recorded the
-// refusal of the option route as unavoidable. Both were wrong.
+// one the caller made with Object.create(null).
+//
+// This function is TOLD which is which. It does not read the provenance
+// off the concrete type, which cannot carry it: a Go map is never a
+// parsed cell, but an *OrderedMap can be either, because OrderedMap is
+// public and `jsonic.NewOrderedMap()` is a value a caller can hand to
+// `field.empty`. normalizeOptions walks the option bag at the point the
+// options are READ and records every object it finds there, and that set
+// is what decides the two routes apart here. Two earlier rounds got this
+// wrong in opposite directions: the first recorded the option route as
+// unrefusable in DIVERGENCE.md, and the second refuted it with `%T`,
+// which only looked right because no test handed the option route a
+// type the lexer also builds.
 //
 // The last-resort `fmt.Sprintf("%v", v)` this used to end with is what
 // made that necessary: it put the engine's internal struct into a column
 // name (`{x:1}` became `&{[x] map[x:1] false}`) and an array into Go's
 // own bracket form (`[1,2]` became `[1 2]`), neither of which the
 // canonical runtime can produce for any input.
-func jsKey(val any) (key string, ok bool) {
+func jsKey(val any, objects optionObjects) (key string, ok bool) {
 	switch v := val.(type) {
 	case string:
 		return v, true
@@ -1082,17 +1390,51 @@ func jsKey(val any) (key string, ok bool) {
 	case nil:
 		return "null", true
 	case []any:
-		return jsArrayKey(v)
-	case *jsonic.OrderedMap, jsonic.OrderedMap:
-		// A PARSED object. See the divergence above: the canonical throws
-		// rather than naming the column, so this port refuses instead.
-		// Listed explicitly so the reflect fallbacks below cannot claim
-		// it: an OrderedMap is a struct, not a Go map, but saying so out
-		// loud is what keeps the two routes apart when either type moves.
+		return jsArrayKey(v, objects)
+	case *jsonic.OrderedMap:
+		// An object, and which route it came by is NOT written on it:
+		// OrderedMap is public and `jsonic.NewOrderedMap()` is a value a
+		// caller can put in `field.empty`. So ask the record tagOptions
+		// built where the options were read. An object IN it came from an
+		// option, and the canonical's option merge rebuilds a plain
+		// source object onto Object.prototype, so String names the column
+		// "[object Object]" and nothing throws. An object that is NOT in
+		// it is one the lexer allocated, with a null prototype and no
+		// toString, and the canonical throws rather than naming it, so
+		// this port refuses the document.
+		if v != nil {
+			if _, fromOption := objects[v]; fromOption {
+				return "[object Object]", true
+			}
+		}
 		return "", false
+	case jsonic.OrderedMap:
+		// The VALUE form. The lexer allocates objects and hands out
+		// pointers, so only a caller can write this, and only into an
+		// option. Named as the option route is named. Listed here, ahead
+		// of the reflect fallbacks, because an OrderedMap is a struct and
+		// not a Go map, so nothing below would claim it.
+		return "[object Object]", true
 	default:
 		if f, isNumber := jsNumber(val); isNumber {
 			return jsNumberToString(f), true
+		}
+		// A DECLARED type over a primitive keeps its kind and has its own
+		// dynamic type, so the exact-type cases above miss it:
+		// `type Column string` is not `string` to a type switch. It IS
+		// the same string to JavaScript, which has no such distinction,
+		// so `field.names: []any{Column("x")}` names the column "x"
+		// there, where this port refused the whole document as
+		// `unexpected`. Read after the fast paths, so the shapes the
+		// lexer builds never pay for reflection.
+		if s, isString := jsString(val); isString {
+			return s, true
+		}
+		if b, isBool := jsBool(val); isBool {
+			if b {
+				return "true", true
+			}
+			return "false", true
 		}
 		// A slice of any element type, not just []any. `field.empty` and
 		// `field.names` are unconstrained Go options, so a caller writes
@@ -1104,15 +1446,19 @@ func jsKey(val any) (key string, ok bool) {
 		// Array.prototype.toString joins whatever is in it, so each of
 		// these is the same array to the canonical runtime.
 		if items, isSlice := asSlice(val); isSlice {
-			return jsArrayKey(items)
+			return jsArrayKey(items, objects)
 		}
-		// A Go MAP is an option value, never a parsed cell: the lexer
-		// builds *jsonic.OrderedMap, refused above. The canonical's option
-		// merge rebuilds a plain source object onto Object.prototype on
-		// the way into the bag, so String gives it "[object Object]" and
-		// nothing throws. Provenance is therefore readable from the Go
-		// type, and this port answers the option route exactly as the
-		// canonical does.
+		// A Go MAP is an option value, and here the TYPE does settle it:
+		// the lexer has no way to build one, so no parsed cell can be a
+		// Go map. (An OrderedMap is not settled by its type, which is why
+		// it is answered from the option record above.) The canonical's
+		// option merge rebuilds a plain source object onto
+		// Object.prototype on the way into the bag, so String gives it
+		// "[object Object]" and nothing throws. Reached through reflection
+		// rather than a `case map[string]any` so that every map spelling
+		// a Go caller reaches for -- a declared map type, a
+		// map[string]string, a map keyed by something JavaScript has no
+		// spelling for at all -- is named the same way.
 		if reflect.ValueOf(val).Kind() == reflect.Map {
 			return "[object Object]", true
 		}
@@ -1163,6 +1509,9 @@ func asSlice(val any) ([]any, bool) {
 //
 // A value too large for a float64's mantissa loses the same digits the
 // canonical runtime loses, because a JavaScript number IS a double.
+//
+// A DECLARED type over a numeric kind (`type Count int`) is read through
+// reflection after the exact types, for the reason spelled out there.
 func jsNumber(val any) (float64, bool) {
 	switch v := val.(type) {
 	case float64:
@@ -1192,9 +1541,29 @@ func jsNumber(val any) (float64, bool) {
 	case json.Number:
 		f, err := v.Float64()
 		return f, err == nil
-	default:
+	}
+	// A DECLARED type over a numeric kind: `type Count int`, or the
+	// `type Ratio float64` a caller reaches for to keep a unit straight.
+	// It keeps the kind and has its own dynamic type, so the cases above
+	// miss it, and `field.empty: Count(42)` was refused where the
+	// canonical names the column "42". Read after them, so the float64
+	// the lexer builds never pays for reflection.
+	rv := reflect.ValueOf(val)
+	if !rv.IsValid() {
 		return 0, false
 	}
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return float64(rv.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return rv.Float(), true
+	}
+	// Uintptr, the two complex kinds and everything else have no
+	// JavaScript spelling, and are left to be refused rather than given
+	// a number's name.
+	return 0, false
 }
 
 // jsArrayKey is Array.prototype.toString, which is join(',') with no
@@ -1207,14 +1576,17 @@ func jsNumber(val any) (float64, bool) {
 // string comes from join, not from ToString, so it applies only inside
 // an array.
 //
-// The recursion needs no depth bound and no seen-set. A parsed value is
-// a TREE: the engine folds each finished rule's value into its parent
-// and never stores a reference to an ancestor, so no element can reach
-// its own array and the walk always terminates. Its depth is the
-// document's bracket nesting, which the caller's stack has already
-// carried once while the engine built the value and carries again
-// whenever the value is marshalled.
-func jsArrayKey(items []any) (string, bool) {
+// The recursion needs no seen-set HERE, because neither of the two
+// things it can be handed contains itself. A parsed value is a TREE: the
+// engine folds each finished rule's value into its parent and never
+// stores a reference to an ancestor, so no element can reach its own
+// array. An OPTION value can be spelled as one -- `a := make([]any, 1);
+// a[0] = a` -- and normalizeOptions refuses that at the point the options
+// are read, which is the call the canonical throws a RangeError out of.
+// Its depth is the document's bracket nesting, which the caller's stack
+// has already carried once while the engine built the value and carries
+// again whenever the value is marshalled.
+func jsArrayKey(items []any, objects optionObjects) (string, bool) {
 	var joined strings.Builder
 	for i, item := range items {
 		if 0 < i {
@@ -1223,7 +1595,7 @@ func jsArrayKey(items []any) (string, bool) {
 		if item == nil || jsonic.IsUndefined(item) {
 			continue
 		}
-		part, ok := jsKey(item)
+		part, ok := jsKey(item, objects)
 		if !ok {
 			return "", false
 		}
