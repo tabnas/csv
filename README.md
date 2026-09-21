@@ -11,7 +11,7 @@ A [Jsonic](https://github.com/tabnas/jsonic) / [Tabnas](https://github.com/tabna
 grammar plugin that parses CSV text into arrays of objects (or arrays
 of arrays), with headers, RFC 4180 quoting, custom field/record
 separators, streaming, and a strict / non-strict mode. Available for
-both TypeScript and Go.
+TypeScript, Go and Rust.
 
 Docs, guides, the error reference and the playground: **[tabnas.dev](https://tabnas.dev)**.
 
@@ -25,6 +25,15 @@ npm install @tabnas/csv @tabnas/parser @tabnas/jsonic
 ```bash
 # Go
 go get github.com/tabnas/csv/go
+```
+
+```toml
+# Rust: sibling checkouts of tabnas/csv, tabnas/jsonic, tabnas/json and
+# tabnas/parser beside your crate; none is published to crates.io
+[dependencies]
+tabnas-csv = { path = "../csv/rs" }
+tabnas-jsonic = { path = "../jsonic/rs" }
+tabnas = { path = "../parser/rs" }
 ```
 
 ## One tiny example
@@ -57,11 +66,19 @@ result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 // [map[name:Alice age:30] map[name:Bob age:25]]
 ```
 
+**Rust**
+
+```rust
+let parser = tabnas_csv::make();
+let value = parser.parse("name,age\nAlice,30\nBob,25")?;
+// [{"name":"Alice","age":"30"},{"name":"Bob","age":"25"}]
+```
+
 ## Conformance
 
 RFC 4180 quoting (`""` escaping, embedded separators, embedded line breaks)
 inside a deliberately **lenient, PapaParse-compatible** reader, not a strict
-RFC 4180 validator. Verified in both runtimes against two third-party corpora
+RFC 4180 validator. Verified in every runtime against two third-party corpora
 at pinned upstream commits:
 
 | Corpus | Result |
@@ -95,23 +112,27 @@ understanding.
 - [Reference](go/doc/reference.md). API, options, and grammar.
 - [Concepts](go/doc/concepts.md). How it works, plus differences from TS.
 
+**Rust**: [`rs/README.md`](rs/README.md). Use, install, and the
+differences from TypeScript.
+
 ## Repository layout
 
 | Path | Description |
 |---|---|
 | [`ts/`](ts/) | TypeScript / JavaScript implementation (`@tabnas/csv`). |
 | [`go/`](go/) | Go port (`github.com/tabnas/csv/go`). |
-| [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, embedded into both runtimes. |
-| [`test/fixtures/`](test/fixtures/) | Shared conformance fixtures, exercised by both runtimes. |
+| [`rs/`](rs/) | Rust port (crate `tabnas-csv`). |
+| [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, embedded into every runtime. |
+| [`test/fixtures/`](test/fixtures/) | Shared conformance fixtures, exercised by every runtime. |
 
 ## Grammar
 
 The grammar is defined once in the top-level
-[`csv-grammar.jsonic`](csv-grammar.jsonic) and embedded into both the
-TypeScript ([`ts/src/csv.ts`](ts/src/csv.ts)) and Go
-([`go/csv.go`](go/csv.go)) implementations by
-[`ts/embed-grammar.js`](ts/embed-grammar.js) (run as part of
-`npm run build`).
+[`csv-grammar.jsonic`](csv-grammar.jsonic) and embedded into the
+TypeScript ([`ts/src/csv.ts`](ts/src/csv.ts)), Go
+([`go/csv.go`](go/csv.go)) and Rust ([`rs/src/lib.rs`](rs/src/lib.rs))
+implementations by [`ts/embed-grammar.js`](ts/embed-grammar.js) (run as
+part of `npm run build`).
 
 ## Grammar diagram
 
