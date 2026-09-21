@@ -3,3 +3,12 @@ a,b,c\ntrue,[1,2],{x:{y:"q\\"w"}}\n x , 'y\\'y', "z\\"z"\n	[{"a":true,"b":[1,2],
 a\n{x:1}y	ERROR:unexpected	{"strict":false}
 1,2,3\n4,5,6\n	[{"1":4,"2":5,"3":6}]	{"strict":false}
 true,null,1.5\np,q,r\n	[{"true":"p","null":"q","1.5":"r"}]	{"strict":false}
+# A COMPOSITE header cell is coerced the way JavaScript coerces it.
+# Array.prototype.toString is join(','): a nested array flattens, an
+# empty array is the empty string, and a null element joins as empty.
+a,[1,2]\nx,y	[{"a":"x","1,2":"y"}]	{"strict":false}
+a,[1,[2,3]]\nx,y	[{"a":"x","1,2,3":"y"}]	{"strict":false}
+a,[]\nx,y	[{"a":"x","":"y"}]	{"strict":false}
+a,[null,1]\nx,y	[{"a":"x",",1":"y"}]	{"strict":false}
+a,[[],[]]\nx,y	[{"a":"x",",":"y"}]	{"strict":false}
+a,[1.5,1e21,1e-7]\nx,y	[{"a":"x","1.5,1e+21,1e-7":"y"}]	{"strict":false}

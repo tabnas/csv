@@ -384,6 +384,51 @@ fn number() {
 // every non-string header cell "", which also collapsed the columns onto
 // one key; that is fixed, so the coverage moved to the shared fixture
 // rather than staying in one runtime.
+//
+// An ARRAY header cell is named the same way, through
+// `Array.prototype.toString`, which is `join(',')`. Those cases live in
+// `test/spec/unstrict.tsv`, again in all three runtimes.
+
+// DIVERGENCE (see ../../DIVERGENCE.md): an OBJECT header cell.
+//
+// The canonical TypeScript throws a raw JavaScript
+// `TypeError: Cannot convert object to primitive value`, because a jsonic
+// object is allocated with a null prototype and so has no `toString`.
+// This port cannot raise a JavaScript `TypeError`, so it refuses the
+// document with the engine's inherited `unexpected` code instead of
+// inventing a column name the canonical never produces. That is why the
+// case cannot be a shared fixture row: the canonical does not fail with a
+// parse error, it throws.
+//
+// Asserted in both directions, so a repair fails as loudly as a
+// regression: the parse must FAIL, and with the code recorded. Before
+// this, the document parsed and the column was named `{"x":1.0}`, a JSON
+// render of the cell.
+#[test]
+fn an_object_header_cell_refuses_the_document() {
+    for src in [
+        "a,{x:1}\nx,y",
+        "a,[{x:1}]\nx,y",
+        "a,[1,{x:1}]\nx,y",
+        "{x:1},a\nx,y",
+    ] {
+        assert_eq!(
+            code_of(src, json!({"strict": false})),
+            "unexpected",
+            "{src}"
+        );
+    }
+}
+
+// The same cell is ordinary text in strict mode, where no field body is
+// parsed, so the refusal above cannot reach a default-options document.
+#[test]
+fn an_object_header_cell_is_text_in_strict_mode() {
+    assert_eq!(
+        must_default("a,{x:1}\nx,y"),
+        json!([{"a": "x", "{x:1}": "y"}])
+    );
+}
 
 // The same spelling reaches a field body, through the text rules that
 // concatenate a token value with the text around it (the TypeScript

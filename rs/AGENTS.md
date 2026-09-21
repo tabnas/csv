@@ -133,6 +133,13 @@ The corpus directory is gitignored.
   root guide's "Known limitations").
 - `field.empty` as a non-string: any JSON value, through the bag or the
   typed struct.
+- The one divergence in [`../DIVERGENCE.md`](../DIVERGENCE.md): an object
+  header cell (`a,{x:1}` in non-strict mode). The canonical throws a raw
+  JavaScript `TypeError`, which is neither a value a row can compare nor
+  an `ERROR:<code>` a row can name, so `tests/csv_test.rs` pins the
+  refusal instead. An ARRAY header cell is not a divergence: `key_text`
+  joins it as `Array.prototype.toString` does, and
+  `../test/spec/unstrict.tsv` runs those rows in all three runtimes.
 
 ## The docs are gated
 

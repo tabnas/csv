@@ -274,7 +274,25 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 						// assertion here named all three "" instead, and
 						// they then collapsed onto ONE key: `1,2,3` over
 						// `4,5,6` returned {"":6}, losing two columns.
-						names[i] = jsKey(v)
+						//
+						// An OBJECT cell has no ToString at all, and the
+						// canonical runtime throws a TypeError rather than
+						// naming the column. This port cannot raise one, so
+						// it refuses the document with the engine's
+						// inherited `unexpected` code instead of inventing
+						// a name. DIVERGENCE.md records that choice.
+						name, nameOk := jsKey(v)
+						if !nameOk {
+							if ctx.T0 != nil {
+								ctx.ParseErr = ctx.T0.Bad("unexpected", nil)
+							} else {
+								ctx.ParseErr = (&jsonic.Token{
+									Name: "#BD", Tin: jsonic.TinBD,
+								}).Bad("unexpected", nil)
+							}
+							return
+						}
+						names[i] = name
 					}
 					ctx.Meta["fields"] = names
 				} else {
@@ -973,24 +991,74 @@ func boolPtr(b bool) *bool {
 // jsKey renders a value as JavaScript renders it when it is used as an
 // object key: `obj[v] = ...` applies ToPropertyKey, which for anything
 // but a symbol is ToString. Only the vocabulary a parsed CSV field can
-// hold is spelled out; anything else takes the same last-resort form the
-// engine's own value formatter uses.
-func jsKey(val any) string {
+// hold is spelled out.
+//
+// ok is false when JavaScript cannot make a primitive of the value at
+// all, which is every OBJECT: a jsonic object is allocated with a null
+// prototype, so it inherits neither toString nor Symbol.toPrimitive and
+// the canonical runtime throws
+// `TypeError: Cannot convert object to primitive value` instead of
+// naming the column. Neither port can raise a JavaScript TypeError, so
+// each refuses the document instead; see DIVERGENCE.md.
+//
+// The last-resort `fmt.Sprintf("%v", v)` this used to end with is what
+// made that necessary: it put the engine's internal struct into a column
+// name (`{x:1}` became `&{[x] map[x:1] false}`) and an array into Go's
+// own bracket form (`[1,2]` became `[1 2]`), neither of which the
+// canonical runtime can produce for any input.
+func jsKey(val any) (key string, ok bool) {
 	switch v := val.(type) {
 	case string:
-		return v
+		return v, true
 	case float64:
-		return jsNumberToString(v)
+		return jsNumberToString(v), true
 	case bool:
 		if v {
-			return "true"
+			return "true", true
 		}
-		return "false"
+		return "false", true
 	case nil:
-		return "null"
+		return "null", true
+	case []any:
+		return jsArrayKey(v)
 	default:
-		return fmt.Sprintf("%v", v)
+		return "", false
 	}
+}
+
+// jsArrayKey is Array.prototype.toString, which is join(',') with no
+// separator argument (ECMA-262 23.1.3.17 and 23.1.3.34): every element
+// is converted by the same rules, null and undefined become the empty
+// string, and a nested array joins recursively, so `[1,[2,3]]` flattens
+// to "1,2,3" and `[]` is "".
+//
+// Note that a null ELEMENT is "" while a null CELL is "null": the empty
+// string comes from join, not from ToString, so it applies only inside
+// an array.
+//
+// The recursion needs no depth bound and no seen-set. A parsed value is
+// a TREE: the engine folds each finished rule's value into its parent
+// and never stores a reference to an ancestor, so no element can reach
+// its own array and the walk always terminates. Its depth is the
+// document's bracket nesting, which the caller's stack has already
+// carried once while the engine built the value and carries again
+// whenever the value is marshalled.
+func jsArrayKey(items []any) (string, bool) {
+	var joined strings.Builder
+	for i, item := range items {
+		if 0 < i {
+			joined.WriteByte(',')
+		}
+		if item == nil || jsonic.IsUndefined(item) {
+			continue
+		}
+		part, ok := jsKey(item)
+		if !ok {
+			return "", false
+		}
+		joined.WriteString(part)
+	}
+	return joined.String(), true
 }
 
 // jsNumberToString is ECMAScript `Number::toString` with radix 10
