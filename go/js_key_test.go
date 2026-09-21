@@ -4,6 +4,8 @@ package tabnascsv
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -127,7 +129,7 @@ func TestJsKey(t *testing.T) {
 		{[]any{1, int64(2)}, "1,2"},
 	}
 	for _, c := range cases {
-		got, ok := jsKey(c.value)
+		got, ok := jsKey(c.value, nil)
 		if !ok {
 			t.Errorf("jsKey(%#v) refused the value, want %q", c.value, c.expected)
 			continue
@@ -143,9 +145,10 @@ func TestJsKey(t *testing.T) {
 // Before this, the last-resort `fmt.Sprintf("%v", v)` put the engine's
 // internal struct into a column name: `&{[x] map[x:1] false}`.
 //
-// The refusal is keyed on the TYPE, which is what carries provenance
-// here: the lexer allocates a parsed object as *jsonic.OrderedMap, and
-// only that is refused.
+// The refusal is keyed on the option-object record, which is what
+// carries provenance: an OrderedMap that no option supplied came from
+// the lexer, and only that is refused. The nil record below is
+// "no option supplied anything", so every object here is a parsed one.
 func TestJsKeyRefusesAParsedObject(t *testing.T) {
 	object := jsonic.NewOrderedMap()
 	object.Set("x", float64(1))
@@ -155,18 +158,20 @@ func TestJsKeyRefusesAParsedObject(t *testing.T) {
 		[]any{float64(1), object},
 		[]any{[]any{object}},
 	} {
-		if got, ok := jsKey(value); ok {
+		if got, ok := jsKey(value, nil); ok {
 			t.Errorf("jsKey(%#v) = %q, want a refusal", value, got)
 		}
 	}
 }
 
-// A plain Go MAP is the other route to the same site, and it is never a
-// parsed cell: it is an option value the caller wrote. The canonical's
-// option merge rebuilds it onto Object.prototype, so `String` names the
-// column "[object Object]" and nothing throws. jsKey answers that, for
-// every map spelling, and inside an array too, where join converts each
-// element by the same rules.
+// A plain Go MAP is the other route to the same site, and it is the one
+// object spelling whose TYPE does settle the question: the lexer has no
+// way to build one, so a Go map is always an option value the caller
+// wrote. The canonical's option merge rebuilds it onto Object.prototype,
+// so `String` names the column "[object Object]" and nothing throws.
+// jsKey answers that, for every map spelling, and inside an array too,
+// where join converts each element by the same rules. The nil record
+// below is the point: a map needs no entry in it.
 func TestJsKeyNamesAnOptionObject(t *testing.T) {
 	for _, c := range []struct {
 		value    any
@@ -179,7 +184,7 @@ func TestJsKeyNamesAnOptionObject(t *testing.T) {
 		{[]any{map[string]any{"x": float64(1)}}, "[object Object]"},
 		{[]any{"a", map[string]any{}}, "a,[object Object]"},
 	} {
-		got, ok := jsKey(c.value)
+		got, ok := jsKey(c.value, nil)
 		if !ok {
 			t.Errorf("jsKey(%#v) refused the value, want %q", c.value, c.expected)
 			continue
@@ -439,12 +444,13 @@ func TestFieldNamesKeepsEveryElementWhateverItsType(t *testing.T) {
 // null prototype and inherits no toString at all, which is what throws.
 //
 // This port CAN tell one from the other, and the earlier claim in
-// DIVERGENCE.md that it could not was wrong. The two routes have
-// different Go types: the lexer builds *jsonic.OrderedMap, while an
-// option value the caller wrote stays the map[string]any it was written
-// as. So the option route is answered exactly as the canonical answers
-// it, and only the parsed route is refused. Every expectation below is
-// the canonical runtime's own output for the same input.
+// DIVERGENCE.md that it could not was wrong. A Go MAP is the easy half:
+// the lexer has no way to build one, so the type settles it. The hard
+// half, an object the caller wrote as an OrderedMap, is the type the
+// lexer DOES build, and it is answered from the record tagOptions keeps;
+// TestAnOptionObjectIsNamedWhateverGoTypeHoldsIt covers that. Every
+// expectation below is the canonical runtime's own output for the same
+// input.
 func TestAnObjectOptionValueNamesTheColumnAsTheCanonicalDoes(t *testing.T) {
 	for _, c := range []struct {
 		src      string
@@ -495,9 +501,9 @@ func TestAnObjectOptionValueNamesTheColumnAsTheCanonicalDoes(t *testing.T) {
 // The bound on the fix above. A PARSED object cell keeps the null
 // prototype the lexer allocates it with, the canonical throws a
 // TypeError rather than naming the column, and this port still refuses
-// the document there. The type is what separates the two routes, so this
-// asserts the separation and not just the refusal: an option map names a
-// column in the very same parse that refuses a parsed one.
+// the document there. This asserts the SEPARATION and not just the
+// refusal: an option map names a column in the very same parse that
+// refuses a parsed object.
 func TestTheParsedObjectRefusalSurvivesTheOptionObjectFix(t *testing.T) {
 	// A parsed object cell, refused.
 	j := jsonic.Make()
@@ -765,5 +771,439 @@ func TestADegenerateQuoteIsInertRatherThanGreedy(t *testing.T) {
 	case <-done:
 	case <-time.After(20 * time.Second):
 		t.Fatal(`string.quote "": the parse did not finish`)
+	}
+}
+
+// The Go spellings a caller reaches for that the lexer never builds. A
+// DECLARED type keeps its kind and has its own dynamic type, so every
+// exact-type switch on an option value missed it. JavaScript has no such
+// distinction: `Column("x")` IS the string "x" there.
+type optionColumn string
+type optionCount int
+type optionFlag bool
+type optionRatio float64
+type optionUnsigned uint
+type optionFieldMap map[string]any
+type optionRing []any
+type optionSink func(string, any)
+
+// An OBJECT supplied as an OPTION value is named "[object Object]" by the
+// canonical, whatever the caller built it with: the option merge rebuilds
+// a plain source object onto Object.prototype on the way into the bag, so
+// String names the column and nothing throws.
+//
+// The previous round answered this from the Go TYPE, on the claim that a
+// parsed object is *jsonic.OrderedMap while an option object is the
+// map[string]any the caller wrote. That claim was FALSE. OrderedMap is a
+// PUBLIC type with a public constructor, so `jsonic.NewOrderedMap()` is
+// an option value of exactly the type the lexer builds, and it was
+// refused as `unexpected` where the canonical names the column. Every
+// expectation below is the canonical runtime's own output for the same
+// input, measured on 2026-09-21.
+func TestAnOptionObjectIsNamedWhateverGoTypeHoldsIt(t *testing.T) {
+	filled := jsonic.NewOrderedMap()
+	filled.Set("q", float64(1))
+
+	for _, c := range []struct {
+		name     string
+		opts     map[string]any
+		src      string
+		expected string
+	}{
+		{
+			"map[string]any",
+			map[string]any{"field": map[string]any{"empty": map[string]any{"q": float64(1)}}},
+			",a\nx,y", `[{"[object Object]":"x","a":"y"}]`,
+		},
+		{
+			// The refutation. Before this, `unexpected`.
+			"jsonic.NewOrderedMap()",
+			map[string]any{"field": map[string]any{"empty": filled}},
+			",a\nx,y", `[{"[object Object]":"x","a":"y"}]`,
+		},
+		{
+			"an empty jsonic.NewOrderedMap()",
+			map[string]any{"field": map[string]any{"empty": jsonic.NewOrderedMap()}},
+			",a\nx,y", `[{"[object Object]":"x","a":"y"}]`,
+		},
+		{
+			// The VALUE form, which only a caller can write.
+			"a jsonic.OrderedMap value",
+			map[string]any{"field": map[string]any{"empty": *filled}},
+			",a\nx,y", `[{"[object Object]":"x","a":"y"}]`,
+		},
+		{
+			// Reached by join, one level down, so the provenance has to
+			// travel INTO the array and not stop at its top.
+			"[]any{jsonic.NewOrderedMap()}",
+			map[string]any{"field": map[string]any{"empty": []any{jsonic.NewOrderedMap()}}},
+			",a\nx,y", `[{"[object Object]":"x","a":"y"}]`,
+		},
+		{
+			"field.names holding an OrderedMap",
+			map[string]any{
+				"header": false,
+				"field":  map[string]any{"names": []any{jsonic.NewOrderedMap()}},
+			},
+			"x,y", `[{"[object Object]":"x","field~1":"y"}]`,
+		},
+	} {
+		j := jsonic.Make()
+		if err := j.UseDefaults(Csv, Defaults, c.opts); err != nil {
+			t.Errorf("field.empty %s: refused the options with %v", c.name, err)
+			continue
+		}
+		result, err := j.Parse(c.src)
+		if err != nil {
+			t.Errorf("field.empty %s: refused with %v, want %s", c.name, err, c.expected)
+			continue
+		}
+		got, _ := json.Marshal(result)
+		if string(got) != c.expected {
+			t.Errorf("field.empty %s\n got %s\nwant %s", c.name, got, c.expected)
+		}
+	}
+}
+
+// The bound on the fix above, asserted so that it fails on over-reach as
+// loudly as on regression. A PARSED object still refuses, and it refuses
+// in the very parse where an option object of the SAME Go type names a
+// column. If provenance were read off the type again, the first case
+// here would start naming a column the canonical throws on.
+//
+// The canonical throws `TypeError: Cannot convert object to primitive
+// value` for the first, and answers the second, measured on 2026-09-21.
+func TestAParsedObjectIsRefusedBesideAnOptionObjectOfTheSameType(t *testing.T) {
+	// The parsed cell `{x:1}` names column 1; `field.empty` names column
+	// 0. Both are objects, both are *jsonic.OrderedMap, and only the
+	// parsed one may refuse.
+	j := jsonic.Make()
+	if err := j.UseDefaults(Csv, Defaults, map[string]any{
+		"strict": false,
+		"field":  map[string]any{"empty": jsonic.NewOrderedMap()},
+	}); err != nil {
+		t.Fatalf("options refused: %v", err)
+	}
+	result, err := j.Parse(",{x:1}\nq,r")
+	if err == nil {
+		got, _ := json.Marshal(result)
+		t.Fatalf("a parsed object cell was named: got %s, want a refusal", got)
+	}
+	assertErrCode(t, "a parsed object beside an option object", err, "unexpected")
+
+	// And when the parsed object EQUALS the option object. Provenance is
+	// the allocation, not the contents: an option object holding x=1
+	// compares equal to a parsed `{x:1}`, and only one of them may be
+	// named. The canonical throws for this one too.
+	equal := jsonic.NewOrderedMap()
+	equal.Set("x", float64(1))
+	je := jsonic.Make()
+	if err := je.UseDefaults(Csv, Defaults, map[string]any{
+		"strict": false,
+		"field":  map[string]any{"empty": equal},
+	}); err != nil {
+		t.Fatalf("options refused: %v", err)
+	}
+	if resultEqual, err := je.Parse(",{x:1}\nq,r"); err == nil {
+		got, _ := json.Marshal(resultEqual)
+		t.Errorf("a parsed object equal to the option object was named: got %s", got)
+	} else {
+		assertErrCode(t, "a parsed object equal to the option object", err, "unexpected")
+	}
+
+	// And with no parsed object in the document, the same options parse.
+	j2 := jsonic.Make()
+	if err := j2.UseDefaults(Csv, Defaults, map[string]any{
+		"strict": false,
+		"field":  map[string]any{"empty": jsonic.NewOrderedMap()},
+	}); err != nil {
+		t.Fatalf("options refused: %v", err)
+	}
+	result2, err := j2.Parse(",a\nq,r")
+	if err != nil {
+		t.Fatalf("option object alone: %v", err)
+	}
+	got, _ := json.Marshal(result2)
+	if want := `[{"[object Object]":"q","a":"r"}]`; string(got) != want {
+		t.Errorf("option object alone\n got %s\nwant %s", got, want)
+	}
+}
+
+// A DECLARED type over a primitive kind. `type Column string` is not
+// `string` to a Go type switch, so an option holding one was refused as
+// `unexpected` where the canonical names the column with the underlying
+// value: JavaScript has one string type, one boolean and one number, and
+// a Go type name is invisible there. Each expectation is the canonical's
+// output for the option written with the underlying value.
+func TestADeclaredPrimitiveTypeNamesAColumnAsItsValueDoes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		opts     map[string]any
+		src      string
+		expected string
+	}{
+		{"names []any{Column,Column}", map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": []any{optionColumn("x"), optionColumn("y")}},
+		}, "1,2", `[{"x":"1","y":"2"}]`},
+		{"names []Column", map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": []optionColumn{"x", "y"}},
+		}, "1,2", `[{"x":"1","y":"2"}]`},
+		{"names []any{Count(42)}", map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": []any{optionCount(42)}},
+		}, "1", `[{"42":"1"}]`},
+		{"names []any{Unsigned(7)}", map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": []any{optionUnsigned(7)}},
+		}, "1", `[{"7":"1"}]`},
+		{"names []any{Ratio(1.5)}", map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": []any{optionRatio(1.5)}},
+		}, "1", `[{"1.5":"1"}]`},
+		{"names []any{Flag(true)}", map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": []any{optionFlag(true)}},
+		}, "1", `[{"true":"1"}]`},
+		{"empty Column(\"x\")", map[string]any{
+			"field": map[string]any{"empty": optionColumn("x")},
+		}, ",a\nx,y", `[{"a":"y","x":"x"}]`},
+		{"empty Count(42)", map[string]any{
+			"field": map[string]any{"empty": optionCount(42)},
+		}, ",a\nx,y", `[{"42":"x","a":"y"}]`},
+	} {
+		j := jsonic.Make()
+		if err := j.UseDefaults(Csv, Defaults, c.opts); err != nil {
+			t.Errorf("%s: options refused with %v", c.name, err)
+			continue
+		}
+		result, err := j.Parse(c.src)
+		if err != nil {
+			t.Errorf("%s: refused with %v, want %s", c.name, err, c.expected)
+			continue
+		}
+		got, _ := json.Marshal(result)
+		if string(got) != c.expected {
+			t.Errorf("%s\n got %s\nwant %s", c.name, got, c.expected)
+		}
+	}
+}
+
+// A SELF-REFERENTIAL option value, refused where the options are read.
+//
+// MEASURED on 2026-09-21: the canonical throws `RangeError: Maximum call
+// stack size exceeded` out of `.use(Csv, opts)` for every one of these --
+// through an array, through an object, at depth 1 and nested deeper --
+// because the engine deep-copies the option bag before the plugin runs.
+// It never reaches Array.prototype.join, whose own cycle guard would
+// render the recursive occurrence as an empty segment, so there is no
+// canonical column name for a cycle to be given.
+//
+// This port refused nothing and had no name to give either: the walk that
+// builds a column name recursed until the goroutine stack was gone, and a
+// Go stack overflow is FATAL and uncatchable, so it took the process
+// down. Refusing the configuration from the same call the canonical
+// throws out of is the closest reachable answer.
+//
+// The engine's own deepClone still overflows for the three container
+// types it copies -- []any, map[string]any and *OrderedMap -- before the
+// plugin is called at all. That is a defect of tabnas/parser/go and is
+// reported there; the cases below are the ones a plugin can reach, which
+// is every OTHER Go container.
+func TestASelfReferentialOptionValueIsRefusedWhereTheOptionsAreRead(t *testing.T) {
+	ring := make(optionRing, 1)
+	ring[0] = ring
+
+	inner := make([]any, 1)
+	outer := optionRing{inner}
+	inner[0] = outer
+
+	loopMap := optionFieldMap{}
+	loopMap["x"] = loopMap
+
+	for _, c := range []struct {
+		name string
+		opts map[string]any
+	}{
+		{"a declared slice type holding itself",
+			map[string]any{"field": map[string]any{"empty": ring}}},
+		{"a cycle two containers long",
+			map[string]any{"field": map[string]any{"empty": outer}}},
+		{"a declared map type holding itself",
+			map[string]any{"field": map[string]any{"empty": loopMap}}},
+		{"field.names holding a cycle",
+			map[string]any{"header": false, "field": map[string]any{"names": []any{ring}}}},
+	} {
+		j := jsonic.Make()
+		err := j.UseDefaults(Csv, Defaults, c.opts)
+		if err == nil {
+			t.Errorf("%s: the options were accepted, want a refusal", c.name)
+			continue
+		}
+		if !errors.Is(err, ErrCyclicOption) {
+			t.Errorf("%s: refused with %v, want ErrCyclicOption", c.name, err)
+		}
+	}
+
+	// The bound. Sharing is not a cycle, and neither is aliasing: two
+	// slices over one array share a data pointer, and a value reached
+	// twice down different branches is reached twice, not forever. Both
+	// expectations are the canonical runtime's output.
+	base := []any{"p", "q"}
+	// A slice that holds a SHORTER slice over its OWN array. The two
+	// share a data pointer and are reached one inside the other, so only
+	// a cycle key that carries the length tells them apart. Spelled with
+	// a declared type because the engine deep-copies a plain []any on the
+	// way into the option bag, which breaks the aliasing before a plugin
+	// can see it -- the same reason a cycle is only reachable here
+	// through a declared container.
+	nested := make(optionRing, 2)
+	nested[0] = "n"
+	nested[1] = nested[:1]
+	shared := []any{"s"}
+	deep := any("leaf")
+	for i := 0; i < 30; i++ {
+		deep = optionRing{deep}
+	}
+	for _, c := range []struct {
+		name     string
+		empty    any
+		expected string
+	}{
+		{"two slices over one array", []any{base[:1], base[:2]}, `[{"a":"y","p,p,q":"x"}]`},
+		{"a slice holding a shorter slice over its own array", nested, `[{"a":"y","n,n":"x"}]`},
+		{"one slice reached twice", []any{shared, shared}, `[{"a":"y","s,s":"x"}]`},
+		{"a deep but acyclic nest", deep, `[{"a":"y","leaf":"x"}]`},
+	} {
+		j := jsonic.Make()
+		if err := j.UseDefaults(Csv, Defaults, map[string]any{
+			"field": map[string]any{"empty": c.empty},
+		}); err != nil {
+			t.Errorf("%s: wrongly refused with %v", c.name, err)
+			continue
+		}
+		result, err := j.Parse(",a\nx,y")
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		got, _ := json.Marshal(result)
+		if string(got) != c.expected {
+			t.Errorf("%s\n got %s\nwant %s", c.name, got, c.expected)
+		}
+	}
+}
+
+// Every OTHER option this port reads by exact type, swept after the three
+// above. The canonical reads a boolean option with `!!`, a `string.csv`
+// with `===`, and the rest as whatever value it was given, so a declared
+// Go type over the same kind is the SAME option there. Each expectation
+// is the canonical runtime's output for the option written with the
+// underlying value, measured on 2026-09-21.
+func TestEveryOptionIsReadByKindRatherThanByExactType(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		opts     map[string]any
+		src      string
+		expected string
+	}{
+		// The whole nested map, dropped by a map[string]any assertion,
+		// which took every option inside it with it.
+		{"field as a declared map type", map[string]any{
+			"header": false, "field": optionFieldMap{"nonameprefix": "F"},
+		}, "1,2", `[{"F0":"1","F1":"2"}]`},
+		{"nonameprefix as a declared string type", map[string]any{
+			"header": false, "field": map[string]any{"nonameprefix": optionColumn("F")},
+		}, "1,2", `[{"F0":"1","F1":"2"}]`},
+		{"field.separation as a declared string type", map[string]any{
+			"field": map[string]any{"separation": optionColumn(";")},
+		}, "a;b\n1;2", `[{"a":"1","b":"2"}]`},
+		{"record.separators as a declared string type", map[string]any{
+			"record": map[string]any{"separators": optionColumn(";")},
+		}, "a,b;1,2", `[{"a":"1","b":"2"}]`},
+		{"string.quote as a declared string type", map[string]any{
+			"string": map[string]any{"quote": optionColumn("|")},
+		}, "a,b\n|x y|,z", `[{"a":"x y","b":"z"}]`},
+		// `!!` is truthiness, not a type test: a declared bool, and a
+		// number or a string in a boolean's place, all read as the
+		// canonical reads them.
+		{"strict as a declared bool type, true", map[string]any{
+			"strict": optionFlag(true),
+		}, "a,b\n1,[2]", `[{"a":"1","b":"[2]"}]`},
+		{"strict as a declared bool type, false", map[string]any{
+			"strict": optionFlag(false),
+		}, "a,b\n1,[2]", `[{"a":1,"b":[2]}]`},
+		{"strict as the number 0, which is falsy", map[string]any{
+			"strict": float64(0),
+		}, "a,b\n1,[2]", `[{"a":1,"b":[2]}]`},
+		{`strict as the string "no", which is truthy`, map[string]any{
+			"strict": "no",
+		}, "a,b\n1,[2]", `[{"a":"1","b":"[2]"}]`},
+		{"header as a declared bool type, false", map[string]any{
+			"header": optionFlag(false),
+		}, "1,2", `[{"field~0":"1","field~1":"2"}]`},
+	} {
+		j := jsonic.Make()
+		if err := j.UseDefaults(Csv, Defaults, c.opts); err != nil {
+			t.Errorf("%s: options refused with %v", c.name, err)
+			continue
+		}
+		result, err := j.Parse(c.src)
+		if err != nil {
+			t.Errorf("%s: refused with %v, want %s", c.name, err, c.expected)
+			continue
+		}
+		got, _ := json.Marshal(result)
+		if string(got) != c.expected {
+			t.Errorf("%s\n got %s\nwant %s", c.name, got, c.expected)
+		}
+	}
+
+	// `field.exact` is read with `&&`, so a truthy non-boolean turns it
+	// ON. Both of these raise csv_extra_field in the canonical, where
+	// this port silently did nothing: a documented option that a
+	// declared type, or a 1, switched off.
+	for _, exact := range []any{optionFlag(true), 1, "yes"} {
+		j := jsonic.Make()
+		if err := j.UseDefaults(Csv, Defaults, map[string]any{
+			"field": map[string]any{"exact": exact},
+		}); err != nil {
+			t.Errorf("field.exact %#v: options refused with %v", exact, err)
+			continue
+		}
+		if _, err := j.Parse("a,b\n1,2,3"); err == nil {
+			t.Errorf("field.exact %#v: parsed, want csv_extra_field", exact)
+		} else {
+			assertErrCode(t, fmt.Sprintf("field.exact %#v", exact), err, "csv_extra_field")
+		}
+	}
+
+	// A declared FUNCTION type has the same signature and its own
+	// dynamic type, and the assertion that read `stream` dropped it: the
+	// records the caller asked to have streamed were built and returned
+	// instead, and the callback never fired. The canonical streams
+	// "start", one "record" and "end", and returns [].
+	var seen []string
+	var sink optionSink = func(what string, record any) {
+		encoded, _ := json.Marshal(record)
+		seen = append(seen, what+":"+string(encoded))
+	}
+	j := jsonic.Make()
+	if err := j.UseDefaults(Csv, Defaults, map[string]any{"stream": sink}); err != nil {
+		t.Fatalf("stream options refused: %v", err)
+	}
+	result, err := j.Parse("a,b\n1,2")
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	got, _ := json.Marshal(result)
+	if string(got) != `[]` {
+		t.Errorf("stream result\n got %s\nwant []", got)
+	}
+	want := `["start:null","record:{\"a\":\"1\",\"b\":\"2\"}","end:null"]`
+	seenJSON, _ := json.Marshal(seen)
+	if string(seenJSON) != want {
+		t.Errorf("stream events\n got %s\nwant %s", seenJSON, want)
 	}
 }
