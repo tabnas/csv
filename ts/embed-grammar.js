@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
-// Embed csv-grammar.jsonic into TypeScript and Go source files.
+// Embed csv-grammar.jsonic into the TypeScript, Go AND Rust source files.
 // Run via: npm run embed  (or:  node embed-grammar.js)
+//
+// The grammar text goes in verbatim: each runtime parses it with its own
+// jsonic instance at plugin load. Never hand-edit between the BEGIN/END
+// markers: edit csv-grammar.jsonic and re-run this script.
 
 const fs = require('fs')
 const path = require('path')
@@ -9,6 +13,7 @@ const path = require('path')
 const GRAMMAR_FILE = path.join(__dirname, '..', 'csv-grammar.jsonic')
 const TS_FILE = path.join(__dirname, 'src', 'csv.ts')
 const GO_FILE = path.join(__dirname, '..', 'go', 'csv.go')
+const RS_FILE = path.join(__dirname, '..', 'rs', 'src', 'lib.rs')
 
 const BEGIN = '// --- BEGIN EMBEDDED csv-grammar.jsonic ---'
 const END = '// --- END EMBEDDED csv-grammar.jsonic ---'
@@ -72,5 +77,41 @@ function embedGo() {
   console.log('Embedded grammar into', GO_FILE)
 }
 
+// --- Rust embedding ---
+function embedRust() {
+  let src = fs.readFileSync(RS_FILE, 'utf8')
+  const startIdx = src.indexOf(BEGIN)
+  const endIdx = src.indexOf(END)
+  if (startIdx === -1 || endIdx === -1) {
+    console.error('Rust markers not found in', RS_FILE)
+    process.exit(1)
+  }
+
+  // A Rust raw string has no escapes, so the grammar goes in verbatim. The
+  // hash count has to clear the longest `"#...` run the text contains, and
+  // the grammar is full of `#LN`-style token names, so two hashes is the
+  // floor rather than the usual one.
+  if (grammar.includes('"##')) {
+    console.error('Grammar contains `"##`, incompatible with the r## raw string')
+    process.exit(1)
+  }
+
+  const replacement =
+    BEGIN +
+    '\nconst GRAMMAR_TEXT: &str = r##"\n' +
+    grammar +
+    '"##;\n' +
+    END
+
+  src = src.substring(0, startIdx) + replacement + src.substring(endIdx + END.length)
+  fs.writeFileSync(RS_FILE, src)
+  console.log('Embedded grammar into', RS_FILE)
+}
+
 embedTS()
 embedGo()
+if (fs.existsSync(RS_FILE)) {
+  embedRust()
+} else {
+  console.log('No Rust source at', RS_FILE, '- skipping')
+}

@@ -17,8 +17,8 @@ text; in **non-strict mode** a field body can hold embedded jsonic
 (`[1,2]`, `{x:1}`), so the plugin preserves jsonic's default `val`/`elem`/
 `list` alternatives.
 
-There are two implementations that must behave identically — TypeScript
-(canonical) and a Go port.
+There are three implementations that must behave identically — TypeScript
+(canonical), a Go port and a Rust port.
 
 ## Repository map
 
@@ -26,12 +26,13 @@ There are two implementations that must behave identically — TypeScript
 |---|---|
 | [`ts/`](ts/) | **Canonical** TypeScript implementation — the `@tabnas/csv` package. Plugin in `src/csv.ts`. Imports the engine as `@tabnas/parser` and the base grammar as `@tabnas/jsonic`. |
 | [`go/`](go/) | Go port — `github.com/tabnas/csv/go`. Plugin in `csv.go`. Depends on `github.com/tabnas/jsonic/go` (jsonic re-exports the engine API in Go). |
-| [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, **source of truth for both runtimes**. Embedded verbatim into both source files. Lives at the repo root — `ts/embed-grammar.js` reads `../csv-grammar.jsonic`. |
+| [`rs/`](rs/) | Rust port: the `tabnas-csv` crate (library `tabnas_csv`). Plugin in `src/lib.rs`, a grammar plugin for the Rust `tabnas` engine over the `tabnas-jsonic` base, mirroring the same split. Supplies `csv` / `plugin()` / `plugin_with()` (the engine plugin), `CsvOptions`, `csv_string_matcher`, and `make` / `make_with` / `parse`. Depends on sibling `tabnas/parser`, `tabnas/jsonic` (which brings `tabnas/json`) and (tests only) `tabnas/support` checkouts via Cargo `path` dependencies. `rs/AGENTS.md` has the crate-specific hazards. |
+| [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, **source of truth for every runtime**. Embedded verbatim into all three source files. Lives at the repo root — `ts/embed-grammar.js` reads `../csv-grammar.jsonic`. |
 | [`tabnas.plugin.json`](tabnas.plugin.json) | Machine-readable plugin descriptor — name, base, grammar, extensions, error codes. Consumed by agent tooling. It deliberately carries **no version**: `versionSource` names `ts/package.json` instead, so this file cannot become a fourth place for the version to drift. Keep `errorCodes` in step with `options: error:` in the grammar. |
-| [`ts/embed-grammar.js`](ts/embed-grammar.js) | Embeds the grammar into `ts/src/csv.ts` AND `go/csv.go`. |
-| [`test/fixtures/`](test/fixtures/) | Shared conformance fixtures (`.csv` input → `.json` expected), run by both runtimes. |
+| [`ts/embed-grammar.js`](ts/embed-grammar.js) | Embeds the grammar into `ts/src/csv.ts`, `go/csv.go` AND `rs/src/lib.rs`. |
+| [`test/fixtures/`](test/fixtures/) | Shared conformance fixtures (`.csv` input → `.json` expected), run by every runtime. |
 | [`test/fixtures/manifest.json`](test/fixtures/manifest.json) | Drives the fixture suite (per-case names, options, `csvFile` aliases). |
-| [`test/spec/`](test/spec/) | Shared `.tsv` parity fixtures, auto-discovered by both runtimes (see [`test/AGENTS.md`](test/AGENTS.md)). |
+| [`test/spec/`](test/spec/) | Shared `.tsv` parity fixtures, auto-discovered by every runtime (see [`test/AGENTS.md`](test/AGENTS.md)). |
 | `test/suites/` | Third-party conformance corpora, fetched at pinned commits by [`scripts/fetch-csv-suites.sh`](scripts/fetch-csv-suites.sh). Gitignored. |
 | [`scripts/`](scripts/) | `fetch-csv-suites.sh` (fetch the corpora) and `extract-go-csv-cases.mjs` (turn Go's `reader_test.go` into `cases.json`). |
 | `ts/doc/csv-ts.md`, `go/doc/csv-go.md` | Per-runtime tutorial → how-to → reference → explanation docs. |
@@ -39,7 +40,7 @@ There are two implementations that must behave identically — TypeScript
 
 ## The tabnas engine dependency
 
-Both runtimes depend on the unpublished `@tabnas` siblings via a
+Every runtime depends on the unpublished `@tabnas` siblings via a
 **sibling checkout** (the standard tabnas dev model until the packages
 publish tagged releases):
 
@@ -54,6 +55,14 @@ publish tagged releases):
   module's **only** tabnas dependency — the Go jsonic package re-exports
   the engine types (`jsonic.Make`, `jsonic.Options`, `jsonic.Rule`, …),
   so `csv.go` imports `jsonic`, not `parser`, directly.
+- Rust: `rs/Cargo.toml` takes `tabnas = { path = "../../parser/rs" }`,
+  `tabnas-jsonic = { path = "../../jsonic/rs" }` (which itself takes
+  `tabnas-json = { path = "../../json/rs" }`) and, as a dev-dependency,
+  `tabnas-support = { path = "../../support/rs" }` (the shared fixture
+  loader and runner). None is published, so the sibling checkout is the
+  only resolution; `rs/Cargo.lock` is committed and `ci/rust/run.sh`
+  holds it to the manifest, exempting only the siblings' own version
+  entries.
 
 Clone the siblings (`parser`, `jsonic`, plus `debug`/`railroad` for the
 optional tests) next to this repo and build their TS first. CI does this
@@ -61,29 +70,31 @@ for you (see below).
 
 ## Authority and alignment rules
 
-**TypeScript is canonical. Go is a port of it.** When you change
+**TypeScript is canonical. Go and Rust are ports of it.** When you change
 behaviour:
 
 1. Change `ts/src/csv.ts` first (or `csv-grammar.jsonic` for grammar
    changes — see the embed section below).
-2. Port the same change to `go/csv.go`.
+2. Port the same change to `go/csv.go` and `rs/src/lib.rs`.
 3. Add/extend the shared fixture(s) in `test/fixtures/` + `manifest.json`
    so both runtimes assert the new behaviour. The fixtures are the parity
    contract; both suites resolve them at `../test/fixtures` (TS:
-   `ts/test/csv.test.ts`; Go: `go/csv_test.go` `fixturesDir()`).
-4. Mirror any new unit cases across `ts/test/csv.test.ts` and
-   `go/csv_test.go` — the two unit suites should cover the same ground.
-5. Run both suites and confirm green.
+   `ts/test/csv.test.ts`; Go: `go/csv_test.go` `fixturesDir()`; Rust:
+   `rs/tests/csv_test.rs` `fixtures_dir()`).
+4. Mirror any new unit cases across `ts/test/csv.test.ts`,
+   `go/csv_test.go` and `rs/tests/csv_test.rs` — the unit suites should
+   cover the same ground.
+5. Run all three suites and confirm green.
 
-Do not let the Go behaviour drift from TS. If Go genuinely cannot match
-because of a `jsonic/go` limitation, document the gap here and in the
-relevant `doc/*.md` Errors section rather than silently diverging (see
-"Known limitations").
+Do not let the Go or Rust behaviour drift from TS. If a port genuinely
+cannot match because of an engine limitation, document the gap here and
+in the relevant `doc/*.md` Errors section rather than silently diverging
+(see "Known limitations").
 
 ## The grammar is embedded — never hand-edit the embedded block
 
-`csv-grammar.jsonic` is embedded verbatim into **both** `ts/src/csv.ts`
-and `go/csv.go`, between these markers:
+`csv-grammar.jsonic` is embedded verbatim into **all three** of
+`ts/src/csv.ts`, `go/csv.go` and `rs/src/lib.rs`, between these markers:
 
 ```
 // --- BEGIN EMBEDDED csv-grammar.jsonic ---
@@ -93,22 +104,26 @@ and `go/csv.go`, between these markers:
 
 Edit `csv-grammar.jsonic`, then run the embed step. Never edit the text
 between the markers by hand — it will be overwritten. (The grammar may not
-contain backticks; `embed-grammar.js` aborts if it does, since the Go side
-uses a raw string.)
+contain backticks, since the Go side uses a raw string, nor `"##`, since
+the Rust side uses an `r##"..."##` raw string; `embed-grammar.js` aborts
+on either.)
 
 ```bash
-cd ts && node embed-grammar.js   # writes into ts/src/csv.ts AND go/csv.go
+cd ts && node embed-grammar.js   # writes into ts/src/csv.ts, go/csv.go AND rs/src/lib.rs
 ```
 
 `npm run build` runs the embed step first (`node embed-grammar.js && tsc
---build src test`), so a normal TS build keeps both files in sync.
+--build src test`), so a normal TS build keeps all three files in sync,
+and `rs/tests/embed_test.rs` fails when the Rust copy drifts from the
+file.
 
 The `csv`, `newline`, `record`, and `text` rules live in the grammar file
 (plus the static `rule.start`, `lex.emptyResult`, `error`, and `hint`
 options). The `list`, `elem`, and `val` rules are configured **in code
 instead** (`tn.rule(...)` in TS / `j.Rule(...)` in Go), because
 non-strict mode must preserve jsonic's default alternatives for those
-rules so embedded JSON values keep working.
+rules so embedded JSON values keep working. Rust does the same through
+`define_rule` (`rs/src/lib.rs`).
 
 ## Architecture notes
 
@@ -147,8 +162,9 @@ accepts documents a strict reader rejects, and it treats a bare `CR` as a
 record separator. Both departures are load-bearing — they are what the
 committed `test/fixtures/papa-*` corpus asserts.
 
-**How the claim is checked.** Two third-party corpora are run in **both**
-runtimes, by `ts/test/conformance.test.ts` and `go/conformance_test.go`:
+**How the claim is checked.** Two third-party corpora are run in **every**
+runtime, by `ts/test/conformance.test.ts`, `go/conformance_test.go` and
+`rs/tests/conformance_test.rs`:
 
 | Corpus | Pin | Result |
 |---|---|---|
@@ -159,13 +175,14 @@ The corpora are **not** vendored — `scripts/fetch-csv-suites.sh` fetches them
 at the pinned commits, and both runtimes arrange to run it themselves so a bare
 checkout judges the same cases CI does. `npm test` calls it from the `pretest`
 hook; `go test` has no such hook, so `go/conformance_test.go` shells out to the
-script on the miss path (once per process). This matters because CI's go job is
+script on the miss path (once per process), and `cargo test` has none either,
+so `rs/tests/conformance_test.rs` runs it once per test binary. This matters because CI's go job is
 a bare `go test ./...` over a fresh clone: without the self-fetch the Go half of
 the conformance pair would not run there at all.
 
-**Neither half may skip — ever.** "The corpus could not be obtained" (no
+**No runtime may skip — ever.** "The corpus could not be obtained" (no
 network, no `node` for the case extractor) is a **failure**, not a skip, in
-both runtimes: a conformance suite that quietly does not run reports green
+every runtime: a conformance suite that quietly does not run reports green
 while measuring nothing. Once a corpus is present every case in it is judged —
 see the `judged` counters, which fail if a case slips through.
 
@@ -242,7 +259,9 @@ is API validation, not a document.
   - Go has **no** counterpart to the TS `field-exact error messages
     interpolate their placeholders` test (`ts/test/csv.test.ts`). Adding one
     now would either fail or have to assert `Row -1`, i.e. pin the bug. Add
-    it the moment the engine is fixed.
+    it the moment the engine is fixed. (The Rust engine injects the
+    supplied details after the positional ones, so `rs/tests/csv_test.rs`
+    carries the port of that test.)
   - Do **not** "fix" this by renaming the `{row}` placeholder to dodge the
     reserved key. That hides an engine inconsistency that other plugins will
     hit too; it belongs upstream in `parser/go`.
@@ -264,13 +283,28 @@ go build ./...
 go test -v ./...       # unit tests + shared fixtures
 ```
 
-The repo root [`Makefile`](Makefile) wraps both: `make build|test` run
-the TS and Go halves, and `make publish-go V=x.y.z` injects `V` into the
-`const VERSION` in `go/csv.go` and tags `go/vX.Y.Z`.
+Rust (from `rs/`; needs `../../parser`, `../../json`, `../../jsonic` and
+`../../support` checked out):
+
+```bash
+cargo build --all-targets
+cargo test --all-targets && cargo test --doc   # unit tests + shared fixtures + corpora + README examples
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
+The repo root [`Makefile`](Makefile) wraps all three: `make build|test` run
+the TS, Go and Rust parts (`make test-rs` alone is the fast Rust loop, and
+`ci/rust/run.sh` the full Rust gate), `make publish-go V=x.y.z` injects
+`V` into the `const VERSION` in `go/csv.go` and tags `go/vX.Y.Z`, and
+`make version-rs V=x.y.z` rewrites the two Rust version sites
+(`rs/Cargo.toml`, `rs/src/lib.rs`) and the lockfile entry, without
+committing or tagging (the crate is unpublished).
 The TS package version is tracked in `ts/package.json`, and is also
-exported as `VERSION` from `ts/src/csv.ts`. Both constants MUST equal
-`ts/package.json` `"version"`: `go/version_test.go` and
-`ts/test/version.test.ts` fail the build if any of the three drift.
+exported as `VERSION` from `ts/src/csv.ts`. Every constant MUST equal
+`ts/package.json` `"version"`, including `version` in `rs/Cargo.toml`
+and `pub const VERSION` in `rs/src/lib.rs`: `go/version_test.go`,
+`ts/test/version.test.ts` and `rs/tests/version_test.rs` fail the build
+if any of them drift.
 
 Local builds resolve the unpublished siblings via the repo-set
 `go.work` + node_modules symlinks created by `admin/scripts/link.sh`;
@@ -282,7 +316,7 @@ The commands that prove a change is correct. Run them from the repo root
 unless stated; they are the same ones CI runs.
 
 ```bash
-make build && make test      # both runtimes — the check that matters
+make build && make test      # every runtime — the check that matters
 ```
 
 Narrower, when iterating:
@@ -290,6 +324,7 @@ Narrower, when iterating:
 ```bash
 (cd ts && npm test)                    # `pretest` builds first
 (cd go && go test ./...)               # unit tests + the shared spec fixtures
+(cd rs && cargo test --all-targets && cargo test --doc)   # the same, plus the README examples
 ```
 
 Each line is a subshell. `npm test` compiles first — its `pretest`
@@ -305,21 +340,25 @@ around it; the wiring is fixed instead, and
 
 What "correct" means here, in order of authority:
 
-1. **The shared fixtures pass in BOTH runtimes.** `test/spec/*.tsv` is the
-   parity contract — a row that passes in one runtime and not the other is a
+1. **The shared fixtures pass in EVERY runtime.** `test/spec/*.tsv` is the
+   parity contract — a row that passes in one runtime and not another is a
    failure, not a discrepancy. csv also carries a csv-specific conformance
-   corpus in `test/fixtures/` (driven by `manifest.json`); both suites must be
-   green.
-2. **The three version constants agree** — `ts/package.json` `"version"`,
-   `VERSION` in `ts/src/csv.ts`, and `const VERSION` in `go/csv.go`.
-   `ts/test/version.test.ts` and `go/version_test.go` fail the build if they
-   drift, so a version bump is three edits, not one.
+   corpus in `test/fixtures/` (driven by `manifest.json`); all three suites
+   must be green.
+2. **The version constants agree** — `ts/package.json` `"version"`,
+   `VERSION` in `ts/src/csv.ts`, `const VERSION` in `go/csv.go`, and
+   `version` in `rs/Cargo.toml` with `pub const VERSION` in `rs/src/lib.rs`.
+   `ts/test/version.test.ts`, `go/version_test.go` and
+   `rs/tests/version_test.rs` fail the build if they drift, so a version
+   bump is five edits, not one (`make version-rs V=x.y.z` does the Rust
+   ones).
 3. **The embedded grammar matches its source.** If you changed
    `csv-grammar.jsonic`, run `npm run embed` from `ts/` — never hand-edit
    between the `BEGIN/END EMBEDDED` markers.
 
-If you cannot make Go match TypeScript because of an engine-API limit, record
-it under "Known limitations" rather than letting the ports diverge silently.
+If you cannot make Go or Rust match TypeScript because of an engine-API
+limit, record it under "Known limitations" rather than letting the ports
+diverge silently.
 
 ## Releasing
 
@@ -344,9 +383,12 @@ accepts the publish. Pushing a tag by hand is the orchestrator's path
 
 The steps, in order:
 
-1. Bump all **three** version sites together — `ts/package.json`, `VERSION`
-   in `ts/src/csv.ts` and `const VERSION` in `go/csv.go`. Drift is caught by
-   `ts/test/version.test.ts` and `go/version_test.go`.
+1. Bump **every** version site together — `ts/package.json`, `VERSION`
+   in `ts/src/csv.ts`, `const VERSION` in `go/csv.go`, and `version` in
+   `rs/Cargo.toml` with `pub const VERSION` in `rs/src/lib.rs` (plus the
+   crate's entry in `rs/Cargo.lock`; `make version-rs V=x.y.z` does the
+   Rust three). Drift is caught by `ts/test/version.test.ts`,
+   `go/version_test.go` and `rs/tests/version_test.rs`.
 2. Verify against the **published** dependencies rather than your checkout.
    The release runner installs fresh from the registry; a working tree
    usually does not, so reproduce that before believing anything:
@@ -561,6 +603,7 @@ This package declares two error codes, in `csv-grammar.jsonic` under
 
 It also *raises* codes it inherits from the engine and from `@tabnas/jsonic` —
 `unexpected` and `unterminated_string` are both exercised by fixtures here.
+The Rust port raises the same codes, from the same sites.
 Inherited codes are not redeclared; overriding one means adding it to the
 `error` table, which is a deliberate behaviour change.
 
@@ -614,6 +657,10 @@ examples correct.
   `admin/scripts/link.sh` by creating `vendor/` symlinks for any
   `../vendor/` replaces and a `go work` over every non-vendor-replaced
   module, then `go build`/`go test -v` here.
+
+The Rust gate is staged in `ci/workflows/rust.yml` (see `ci/README.md`):
+it clones `parser`, `json`, `jsonic` and `support` beside the checkout and
+runs `ci/rust/run.sh`.
 
 ## Agent tooling
 
