@@ -1,3 +1,5 @@
 input	expected	opts
 a,b,c\ntrue,[1,2],{x:{y:"q\\"w"}}\n x , 'y\\'y', "z\\"z"\n	[{"a":true,"b":[1,2],"c":{"x":{"y":"q\"w"}}},{"a":"x","b":"y'y","c":"z\"z"}]	{"strict":false}
 a\n{x:1}y	ERROR:unexpected	{"strict":false}
+1,2,3\n4,5,6\n	[{"1":4,"2":5,"3":6}]	{"strict":false}
+true,null,1.5\np,q,r\n	[{"true":"p","null":"q","1.5":"r"}]	{"strict":false}

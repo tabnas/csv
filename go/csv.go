@@ -4,6 +4,7 @@ package tabnascsv
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -263,7 +264,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				if childArr, ok := r.Child.Node.([]any); ok {
 					names := make([]string, len(childArr))
 					for i, v := range childArr {
-						names[i], _ = v.(string)
+						// A header cell is not always a string: in
+						// non-strict mode the field body is parsed, so
+						// `1,2,3` arrives as three float64s and
+						// `true,null` as a bool and a nil. TS writes
+						// `obj[fields[fI]] = ...`, which puts every such
+						// value through the language's ToPropertyKey, so
+						// the key is its ToString. A dropped type
+						// assertion here named all three "" instead, and
+						// they then collapsed onto ONE key: `1,2,3` over
+						// `4,5,6` returned {"":6}, losing two columns.
+						names[i] = jsKey(v)
 					}
 					ctx.Meta["fields"] = names
 				} else {
@@ -957,4 +968,108 @@ func toString(v any) string {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// jsKey renders a value as JavaScript renders it when it is used as an
+// object key: `obj[v] = ...` applies ToPropertyKey, which for anything
+// but a symbol is ToString. Only the vocabulary a parsed CSV field can
+// hold is spelled out; anything else takes the same last-resort form the
+// engine's own value formatter uses.
+func jsKey(val any) string {
+	switch v := val.(type) {
+	case string:
+		return v
+	case float64:
+		return jsNumberToString(v)
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case nil:
+		return "null"
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// jsNumberToString is ECMAScript `Number::toString` with radix 10
+// (ECMA-262 6.1.6.1.20), which is what `String(n)` gives and therefore
+// what a numeric header cell is named in the canonical runtime.
+//
+// strconv.FormatFloat(v, 'f', -1, 64) is NOT a substitute. It has no
+// switch to exponent form, so 1e21 comes out as twenty-two digits where
+// JavaScript writes "1e+21", and 1e-7 as a string of zeros where
+// JavaScript writes "1e-7".
+//
+// The digits come from a FIXED-precision render rather than the shortest
+// one. Both round-trip, but they break an exact decimal midpoint
+// differently: the shortest form rounds away from zero, while the
+// specification takes the even digit, which is what a fixed-precision
+// render does. The same defect has been found in six Rust crates of this
+// fleet; ts/src/csv.ts needs no such code because the language does it.
+func jsNumberToString(f float64) string {
+	if math.IsNaN(f) {
+		return "NaN"
+	}
+	if math.IsInf(f, 1) {
+		return "Infinity"
+	}
+	if math.IsInf(f, -1) {
+		return "-Infinity"
+	}
+	// Covers -0, which JavaScript prints as "0".
+	if f == 0 {
+		return "0"
+	}
+
+	magnitude := math.Abs(f)
+
+	// The specification's `s` (the digits) and `n` (where the decimal
+	// point sits). Take the digit count from the shortest form, then take
+	// the digits themselves at that fixed precision.
+	shortest := strconv.FormatFloat(magnitude, 'e', -1, 64)
+	mantissa, _, _ := strings.Cut(shortest, "e")
+	k := len(strings.Replace(mantissa, ".", "", 1))
+
+	fixed := strconv.FormatFloat(magnitude, 'e', k-1, 64)
+	mantissa, exponentText, _ := strings.Cut(fixed, "e")
+	digits := strings.Replace(mantissa, ".", "", 1)
+	exponent, err := strconv.Atoi(exponentText)
+	if err != nil {
+		// FormatFloat with 'e' always emits a signed integer exponent.
+		return strconv.FormatFloat(f, 'g', -1, 64)
+	}
+	n := exponent + 1
+
+	var body string
+	switch {
+	case k <= n && n <= 21:
+		// 12 -> "12", 1e19 -> "10000000000000000000"
+		body = digits + strings.Repeat("0", n-k)
+	case 0 < n && n <= 21:
+		// 1.5 -> "1.5"
+		body = digits[:n] + "." + digits[n:]
+	case -6 < n && n <= 0:
+		// 1e-6 -> "0.000001"
+		body = "0." + strings.Repeat("0", -n) + digits
+	default:
+		// 1e21 -> "1e+21", 1e-7 -> "1e-7"
+		e := n - 1
+		head := digits
+		if k > 1 {
+			head = digits[:1] + "." + digits[1:]
+		}
+		sign := "+"
+		if e < 0 {
+			sign = "-"
+			e = -e
+		}
+		body = head + "e" + sign + strconv.Itoa(e)
+	}
+
+	if f < 0 {
+		return "-" + body
+	}
+	return body
 }

@@ -377,42 +377,13 @@ fn number() {
 // that reach a key: negative zero keeps its sign (`-0`), the exponent
 // thresholds at 1e21 and 1e-7 are never taken, and a large integral float
 // prints its exact binary value (`123456789012345683968`) rather than its
-// shortest round-tripping digits. Every expectation below was taken from
-// ts/src/csv.ts.
+// shortest round-tripping digits.
 //
-// This is deliberately NOT a shared `test/spec` row. The Go port names
-// EVERY numeric header cell "" -- `names[i], _ = v.(string)` in
-// go/csv.go drops a non-string -- so a shared row would fail there. It
-// belongs in test/spec the moment Go is fixed.
-#[test]
-fn a_numeric_header_cell_is_named_the_way_javascript_names_it() {
-    for (src, key) in [
-        ("-0\nx", "0"),
-        ("0\nx", "0"),
-        ("1\nx", "1"),
-        ("1e2\nx", "100"),
-        ("-1.5\nx", "-1.5"),
-        // The upper exponent threshold: 1e21 switches to exponent form,
-        // everything below it spells out.
-        ("1e20\nx", "100000000000000000000"),
-        ("1e21\nx", "1e+21"),
-        ("1e22\nx", "1e+22"),
-        // The lower one: 1e-7 switches, 1e-6 does not.
-        ("0.000001\nx", "0.000001"),
-        ("1e-7\nx", "1e-7"),
-        ("1.5e-7\nx", "1.5e-7"),
-        // Shortest round-tripping digits, not the exact binary value.
-        ("123456789012345680000\nx", "123456789012345680000"),
-    ] {
-        let mut record = serde_json::Map::new();
-        record.insert(key.to_string(), Json::String("x".to_string()));
-        assert_eq!(
-            must(src, json!({"number": true})),
-            Json::Array(vec![Json::Object(record)]),
-            "header key for {src:?}"
-        );
-    }
-}
+// Those cases now live in `test/spec/number.tsv`, where all three
+// runtimes run them. They were a Rust-only test while the Go port named
+// every non-string header cell "", which also collapsed the columns onto
+// one key; that is fixed, so the coverage moved to the shared fixture
+// rather than staying in one runtime.
 
 // The same spelling reaches a field body, through the text rules that
 // concatenate a token value with the text around it (the TypeScript
