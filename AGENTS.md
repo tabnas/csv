@@ -234,7 +234,19 @@ RESULT for the same input belongs in [`DIVERGENCE.md`](DIVERGENCE.md)
 instead, with a measured three-way table and a test in each port that
 pins it. One entry is there now: an object header cell in non-strict mode
 (`a,{x:1}`), which TypeScript answers with a raw JavaScript `TypeError`
-and both ports answer by refusing the document.
+and both ports answer by refusing the document. The refusal fires only
+where the canonical actually takes a column NAME from that cell: on a
+data record, with `object` on, with a field list present, and only after
+the `field.exact` length check has passed. Every other reading of the
+same document still returns a value, `object: false` and a header-only
+document included. A PARSED object is the non-strict half of it; an
+object supplied as an OPTION value (`field.empty`, `field.names`) reaches
+the same conversion in the default mode, and the canonical names the
+column `[object Object]` there rather than throwing — because the option
+merge rebuilds a plain source object onto `Object.prototype`, even one
+the caller made with `Object.create(null)`, while a parsed cell keeps the
+null prototype the engine gives it and inherits no `toString` at all.
+`DIVERGENCE.md` measures that route beside this one.
 
 - **`field.exact` error *code* (Go) — FIXED, do not re-add the workaround.**
   This used to be listed here because `jsonic/go` surfaced every

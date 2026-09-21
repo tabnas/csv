@@ -3,6 +3,7 @@
 package tabnascsv
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -220,15 +221,24 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	}
 	nonameprefix := toString(fieldOpts["nonameprefix"])
 	fieldExact := toBool(fieldOpts["exact"])
-	var fieldNames []string
+	// Held as []any, not []string, because the header row is held that way
+	// too: the canonical keeps `ctx.u.fields` as the RAW cells and names a
+	// column only where it builds one. The two sources of a field list have
+	// to be interchangeable, so this one widens rather than that one
+	// narrowing.
+	var fieldNames []any
 	if names, ok := fieldOpts["names"].([]string); ok {
-		fieldNames = names
-	} else if names, ok := fieldOpts["names"].([]any); ok {
 		for _, n := range names {
-			if s, ok := n.(string); ok {
-				fieldNames = append(fieldNames, s)
-			}
+			fieldNames = append(fieldNames, n)
 		}
+	} else if names, ok := fieldOpts["names"].([]any); ok {
+		// Every element is kept, whatever its type, because TS names a
+		// column with `obj[fields[fI]] = ...`, which CONVERTS the element
+		// rather than requiring a string: `names: [1, 2]` names columns
+		// "1" and "2". Keeping only the strings shortened the list
+		// instead, which renamed every column after the dropped one and
+		// changed the count `field.exact` compares a record against.
+		fieldNames = append(fieldNames, names...)
 	}
 
 	refs := map[jsonic.FuncRef]any{
@@ -252,8 +262,8 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 
 		"@record-bc": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			recordI, _ := ctx.Meta["recordI"].(int)
-			var fields []string
-			if fs, ok := ctx.Meta["fields"].([]string); ok {
+			var fields []any
+			if fs, ok := ctx.Meta["fields"].([]any); ok {
 				fields = fs
 			}
 			if fields == nil {
@@ -261,42 +271,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			}
 
 			if recordI == 0 && header {
+				// The header row is kept exactly as it was parsed, which
+				// is what TS keeps: `ctx.u.fields = r.child.node`. A cell
+				// is turned into a column NAME only where an object record
+				// is built, so nothing is converted here. An empty array
+				// is still a field list, as it is in TS where `[]` is
+				// truthy, so a nil slice here would wrongly fall back to
+				// field.names on the next row.
 				if childArr, ok := r.Child.Node.([]any); ok {
-					names := make([]string, len(childArr))
-					for i, v := range childArr {
-						// A header cell is not always a string: in
-						// non-strict mode the field body is parsed, so
-						// `1,2,3` arrives as three float64s and
-						// `true,null` as a bool and a nil. TS writes
-						// `obj[fields[fI]] = ...`, which puts every such
-						// value through the language's ToPropertyKey, so
-						// the key is its ToString. A dropped type
-						// assertion here named all three "" instead, and
-						// they then collapsed onto ONE key: `1,2,3` over
-						// `4,5,6` returned {"":6}, losing two columns.
-						//
-						// An OBJECT cell has no ToString at all, and the
-						// canonical runtime throws a TypeError rather than
-						// naming the column. This port cannot raise one, so
-						// it refuses the document with the engine's
-						// inherited `unexpected` code instead of inventing
-						// a name. DIVERGENCE.md records that choice.
-						name, nameOk := jsKey(v)
-						if !nameOk {
-							if ctx.T0 != nil {
-								ctx.ParseErr = ctx.T0.Bad("unexpected", nil)
-							} else {
-								ctx.ParseErr = (&jsonic.Token{
-									Name: "#BD", Tin: jsonic.TinBD,
-								}).Bad("unexpected", nil)
-							}
-							return
-						}
-						names[i] = name
-					}
-					ctx.Meta["fields"] = names
+					ctx.Meta["fields"] = childArr
 				} else {
-					ctx.Meta["fields"] = []string{}
+					ctx.Meta["fields"] = []any{}
 				}
 			} else {
 				record, _ := r.Child.Node.([]any)
@@ -349,11 +334,44 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 
 					if fields != nil {
 						for fI := 0; fI < len(fields); fI++ {
+							// This is the ONE place a header cell becomes
+							// a column name, and the only place TS
+							// converts one: `obj[fields[fI]] = ...` puts
+							// the raw cell through the language's
+							// ToPropertyKey, which for anything but a
+							// symbol is ToString. In non-strict mode a
+							// field body is parsed, so the cell can be a
+							// float64, a bool, a nil or an array rather
+							// than a string.
+							//
+							// An OBJECT has no ToString at all, and the
+							// canonical runtime throws a TypeError here
+							// rather than naming the column. This port
+							// cannot raise one, so it refuses the document
+							// with the engine's inherited `unexpected`
+							// code instead of inventing a name;
+							// DIVERGENCE.md records that choice. Refusing
+							// at the header row instead was too early: it
+							// also refused an `object: false` parse and a
+							// header-only document, neither of which ever
+							// asks for a name, and both of which the
+							// canonical returns a value for.
+							name, nameOk := jsKey(fields[fI])
+							if !nameOk {
+								if ctx.T0 != nil {
+									ctx.ParseErr = ctx.T0.Bad("unexpected", nil)
+								} else {
+									ctx.ParseErr = (&jsonic.Token{
+										Name: "#BD", Tin: jsonic.TinBD,
+									}).Bad("unexpected", nil)
+								}
+								return
+							}
 							var val any = emptyField
 							if fI < len(record) && !jsonic.IsUndefined(record[fI]) {
 								val = record[fI]
 							}
-							obj[fields[fI]] = val
+							obj[name] = val
 						}
 						i = len(fields)
 					}
@@ -990,8 +1008,12 @@ func boolPtr(b bool) *bool {
 
 // jsKey renders a value as JavaScript renders it when it is used as an
 // object key: `obj[v] = ...` applies ToPropertyKey, which for anything
-// but a symbol is ToString. Only the vocabulary a parsed CSV field can
-// hold is spelled out.
+// but a symbol is ToString. The vocabulary a parsed CSV field can hold is
+// spelled out, and so is the wider one an OPTION value can hold: a field
+// list is `ctx.u.fields` or `field.names`, and `field.empty` is dropped
+// into a syntactically empty cell, so `,a` under
+// `{field: {empty: 42}}` names a column with a value that never went
+// through the lexer.
 //
 // ok is false when JavaScript cannot make a primitive of the value at
 // all, which is every OBJECT: a jsonic object is allocated with a null
@@ -1000,6 +1022,14 @@ func boolPtr(b bool) *bool {
 // `TypeError: Cannot convert object to primitive value` instead of
 // naming the column. Neither port can raise a JavaScript TypeError, so
 // each refuses the document instead; see DIVERGENCE.md.
+//
+// That holds for a PARSED object. An object supplied as an OPTION value
+// is the case this function cannot see: the canonical's option merge
+// rebuilds a plain source object onto Object.prototype on the way into
+// the bag, so String names the column "[object Object]" there and
+// nothing throws, even for one the caller made with Object.create(null).
+// This function is handed a cell, not its provenance, so it refuses that
+// one too. DIVERGENCE.md measures both.
 //
 // The last-resort `fmt.Sprintf("%v", v)` this used to end with is what
 // made that necessary: it put the engine's internal struct into a column
@@ -1010,8 +1040,6 @@ func jsKey(val any) (key string, ok bool) {
 	switch v := val.(type) {
 	case string:
 		return v, true
-	case float64:
-		return jsNumberToString(v), true
 	case bool:
 		if v {
 			return "true", true
@@ -1022,7 +1050,55 @@ func jsKey(val any) (key string, ok bool) {
 	case []any:
 		return jsArrayKey(v)
 	default:
+		if f, isNumber := jsNumber(val); isNumber {
+			return jsNumberToString(f), true
+		}
 		return "", false
+	}
+}
+
+// jsNumber widens Go's numeric spellings to the float64 the lexer always
+// produces. The lexer only ever makes a float64, but an OPTION value is
+// whatever the caller wrote: `field.empty: 42` is an int in a Go map
+// literal, an int64 or a json.Number when the options were decoded, and a
+// float32 when they came from a narrower field. JavaScript has one number
+// type, so every one of these is the same double to the canonical
+// runtime, which names the column "42" where this port used to refuse the
+// document outright.
+//
+// A value too large for a float64's mantissa loses the same digits the
+// canonical runtime loses, because a JavaScript number IS a double.
+func jsNumber(val any) (float64, bool) {
+	switch v := val.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint8:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	default:
+		return 0, false
 	}
 }
 

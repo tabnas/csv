@@ -137,9 +137,30 @@ The corpus directory is gitignored.
   header cell (`a,{x:1}` in non-strict mode). The canonical throws a raw
   JavaScript `TypeError`, which is neither a value a row can compare nor
   an `ERROR:<code>` a row can name, so `tests/csv_test.rs` pins the
-  refusal instead. An ARRAY header cell is not a divergence: `key_text`
-  joins it as `Array.prototype.toString` does, and
-  `../test/spec/unstrict.tsv` runs those rows in all three runtimes.
+  refusal instead. Its SCOPE is pinned beside it: `key_text` is applied
+  where the canonical applies ToPropertyKey and nowhere else, which is
+  `obj[fields[fI]] = ...` on a data record, under `object: true`, with a
+  field list present, and only after the `field.exact` length check has
+  passed. The header row itself is stored raw, so `object: false`, a
+  header-only document, `header: false` and a `field.exact` mismatch all
+  still answer as the canonical answers, and `../test/spec/unstrict.tsv`
+  runs those cases in all three runtimes. An ARRAY header cell is not a
+  divergence: `key_text` joins it as `Array.prototype.toString` does, and
+  `../test/spec/unstrict.tsv` runs those rows in all three runtimes too.
+- The option-value half of the same entry, which no row can hold because
+  the canonical returns a VALUE there while this port fails with a code.
+  `field.empty` is dropped into a syntactically empty cell before any rule
+  runs, so an object written as an option reaches `key_text` in the
+  DEFAULT mode, where the canonical names the column `[object Object]`
+  rather than throwing: the option merge rebuilds a plain source object
+  onto `Object.prototype`, even one the caller made with
+  `Object.create(null)`, while a parsed cell keeps the null prototype the
+  engine gives it. Numbers are not affected here as they are in Go:
+  `Value::from_json` folds every JSON number into the one
+  `Value::Number(f64)` the lexer produces. `field.names` is typed
+  `Option<Vec<String>>`, so a non-string element is refused when the
+  options are read, where the canonical converts it and Go now does too.
+  Both are pinned in `tests/csv_test.rs`.
 
 ## The docs are gated
 
