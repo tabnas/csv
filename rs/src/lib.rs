@@ -420,6 +420,86 @@ fn counter(rule: &Rule, name: &str) -> i32 {
     rule.n.get(name).copied().unwrap_or(0)
 }
 
+/// JavaScript's `Number::toString` (ECMA-262 6.1.6.1.20), which is what
+/// the canonical TypeScript `'' + value` spells, and so what a numeric cell
+/// becomes as field text or as a column name.
+///
+/// Rust's own `f64` formatting differs from it in three ways that reach a
+/// header key. It keeps the sign of negative zero (`-0`, where JavaScript
+/// says `0`). It never switches to exponent form, where JavaScript does so
+/// at `1e21` and at `1e-7`. And `format!("{n:.0}")` prints a large integral
+/// float's exact binary value (`123456789012345683968`) rather than its
+/// shortest round-tripping digits (`123456789012345680000`).
+fn js_number_to_string(number: f64) -> String {
+    if number.is_nan() {
+        return "NaN".to_string();
+    }
+    // Catches -0.0 as well: JavaScript spells both zeros "0".
+    if number == 0.0 {
+        return "0".to_string();
+    }
+    if number < 0.0 {
+        return format!("-{}", js_number_to_string(-number));
+    }
+    if number.is_infinite() {
+        return "Infinity".to_string();
+    }
+
+    // The specification wants the shortest digit string `s` that round-trips
+    // (length `k`), and `n`, the position of the decimal point relative to
+    // it. Rust's `{:e}` yields digits of exactly that shortest length.
+    let shortest = format!("{number:e}");
+    let shortest_k = shortest
+        .split_once('e')
+        .map(|(mantissa, _)| mantissa.chars().filter(char::is_ascii_digit).count())
+        .expect("a finite f64 always formats with an exponent");
+
+    // Re-render to that same length to settle a tie. Where two digit
+    // strings of length `k` are equally close to `number`, the
+    // specification takes the one ending in an even digit; Rust's shortest
+    // form does not, but its exactly-rounded fixed-precision form does.
+    let exponential = format!("{:.*e}", shortest_k - 1, number);
+    let (mantissa, exponent) = exponential
+        .split_once('e')
+        .expect("a finite f64 always formats with an exponent");
+    // Rounding can leave trailing zeros (and, on a carry, one digit too
+    // many); dropping them keeps `s` shortest, which is what `k` means.
+    let digits = mantissa
+        .chars()
+        .filter(|digit| *digit != '.')
+        .collect::<String>();
+    let digits = digits.trim_end_matches('0');
+    let digits = if digits.is_empty() { "0" } else { digits };
+    let k = digits.len() as i32;
+    let n = exponent
+        .parse::<i32>()
+        .expect("a formatted exponent is an integer")
+        + 1;
+
+    // The four cases of the specification, in its order. The range bounds
+    // are `k <= n <= 21`, `0 < n <= 21` and `-6 < n <= 0`.
+    if (k..=21).contains(&n) {
+        // Integral, with n - k trailing zeros to restore.
+        let mut text = digits.to_string();
+        text.push_str(&"0".repeat((n - k) as usize));
+        text
+    } else if (1..=21).contains(&n) {
+        let point = n as usize;
+        format!("{}.{}", &digits[..point], &digits[point..])
+    } else if (-5..=0).contains(&n) {
+        format!("0.{}{}", "0".repeat(-n as usize), digits)
+    } else {
+        // Exponent form. `n - 1` is never 0 here, so the sign is never "+0".
+        let sign = if n - 1 < 0 { '-' } else { '+' };
+        let power = (n - 1).abs();
+        if k == 1 {
+            format!("{digits}e{sign}{power}")
+        } else {
+            format!("{}.{}e{sign}{power}", &digits[..1], &digits[1..])
+        }
+    }
+}
+
 /// A JavaScript `'' + value`: what the text actions concatenate. Text and
 /// string tokens carry their text; a number or keyword (`number` /
 /// `value` on) spells itself the way JavaScript does.
@@ -428,13 +508,7 @@ fn value_text(value: &Value) -> String {
         Value::Undefined => String::new(),
         Value::Null => "null".to_string(),
         Value::Bool(flag) => flag.to_string(),
-        Value::Number(number) => {
-            if number.fract() == 0.0 && number.abs() < 1e21 {
-                format!("{number:.0}")
-            } else {
-                number.to_string()
-            }
-        }
+        Value::Number(number) => js_number_to_string(*number),
         Value::String(text) => text.clone(),
         Value::Text(text) => text.string.clone(),
         other => other.to_json().to_string(),

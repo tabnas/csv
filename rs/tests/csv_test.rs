@@ -371,6 +371,67 @@ fn number() {
     );
 }
 
+// A numeric header cell becomes a column NAME, and the canonical
+// TypeScript names it with JavaScript's object-key coercion, which is
+// `String(number)`. Rust's own f64 formatting disagrees in three places
+// that reach a key: negative zero keeps its sign (`-0`), the exponent
+// thresholds at 1e21 and 1e-7 are never taken, and a large integral float
+// prints its exact binary value (`123456789012345683968`) rather than its
+// shortest round-tripping digits. Every expectation below was taken from
+// ts/src/csv.ts.
+//
+// This is deliberately NOT a shared `test/spec` row. The Go port names
+// EVERY numeric header cell "" -- `names[i], _ = v.(string)` in
+// go/csv.go drops a non-string -- so a shared row would fail there. It
+// belongs in test/spec the moment Go is fixed.
+#[test]
+fn a_numeric_header_cell_is_named_the_way_javascript_names_it() {
+    for (src, key) in [
+        ("-0\nx", "0"),
+        ("0\nx", "0"),
+        ("1\nx", "1"),
+        ("1e2\nx", "100"),
+        ("-1.5\nx", "-1.5"),
+        // The upper exponent threshold: 1e21 switches to exponent form,
+        // everything below it spells out.
+        ("1e20\nx", "100000000000000000000"),
+        ("1e21\nx", "1e+21"),
+        ("1e22\nx", "1e+22"),
+        // The lower one: 1e-7 switches, 1e-6 does not.
+        ("0.000001\nx", "0.000001"),
+        ("1e-7\nx", "1e-7"),
+        ("1.5e-7\nx", "1.5e-7"),
+        // Shortest round-tripping digits, not the exact binary value.
+        ("123456789012345680000\nx", "123456789012345680000"),
+    ] {
+        let mut record = serde_json::Map::new();
+        record.insert(key.to_string(), Json::String("x".to_string()));
+        assert_eq!(
+            must(src, json!({"number": true})),
+            Json::Array(vec![Json::Object(record)]),
+            "header key for {src:?}"
+        );
+    }
+}
+
+// The same spelling reaches a field body, through the text rules that
+// concatenate a token value with the text around it (the TypeScript
+// `'' + r.o0.val`). Checked against ts/src/csv.ts on the same inputs.
+#[test]
+fn a_number_in_field_text_is_spelled_the_way_javascript_spells_it() {
+    for (src, field) in [
+        ("a\n-0 x", "0 x"),
+        ("a\n1e21 x", "1e+21 x"),
+        ("a\n1e-7 z", "1e-7 z"),
+    ] {
+        assert_eq!(
+            must(src, json!({"number": true})),
+            json!([{ "a": field }]),
+            "field text for {src:?}"
+        );
+    }
+}
+
 #[test]
 fn value() {
     assert_eq!(must_default("a\ntrue"), json!([{"a":"true"}]));

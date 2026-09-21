@@ -11,8 +11,10 @@
 [Bb]ool
 [Bb]ooleans
 [Cc]SV
+[Cc]lippy
 [Jj]sonic
 [Ll]exes
+[Ll]ockfile
 [Ll]ookahead
 [Mm]atchers
 [Nn]pm

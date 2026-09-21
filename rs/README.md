@@ -148,15 +148,19 @@ next to this repository and point at them:
 tabnas-csv = { path = "../csv/rs" }
 tabnas-jsonic = { path = "../jsonic/rs" }
 tabnas = { path = "../parser/rs" }
+serde_json = "1"
 ```
 
-All three entries are needed. A crate's dependencies are not passed on to
-its dependents, so `tabnas-csv` alone does not put `tabnas` or
-`tabnas-jsonic` in your extern prelude, and the examples above that name
-`tabnas::Value` or `tabnas_jsonic::make` would not resolve. Only
-`CsvError` is re-exported. The test suite additionally needs
-`https://github.com/tabnas/support` beside the repository, for the shared
-fixture runner.
+All four entries are needed. A crate's dependencies are not passed on to
+its dependents, so `tabnas-csv` alone does not put `tabnas`,
+`tabnas-jsonic` or `serde_json` in your extern prelude, and the examples
+above that name `tabnas::Value`, `tabnas_jsonic::make` or
+`serde_json::json!` would not resolve. Only `CsvError` is re-exported.
+`serde_json` is declared because the option bag is a `tabnas::Value` and
+`Value::from_json` takes a `serde_json::Value`; a program that uses only
+the `CsvOptions` struct can leave it out. The test suite additionally
+needs `https://github.com/tabnas/support` beside the repository, for the
+shared fixture runner.
 
 ## Differences from the canonical TypeScript
 
