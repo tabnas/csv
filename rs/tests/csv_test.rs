@@ -558,10 +558,14 @@ fn field_empty_names_a_column_from_an_option_value() {
 // gives it "[object Object]" whatever the caller wrote, an object made
 // with `Object.create(null)` included; that is measured in
 // `DIVERGENCE.md`. A PARSED cell is allocated with a null prototype and
-// inherits no `toString` at all, which is what throws. This port cannot
-// tell one from the other, since a cell is a cell by the time the name is
-// taken, so it refuses both, and `DIVERGENCE.md` records the canonical
-// results measured beside these.
+// inherits no `toString` at all, which is what throws. This port refuses
+// both, which is a PORT DEFECT and not an impossibility: the Go port now
+// answers the option route exactly as the canonical does, by reading the
+// provenance off the value's type, and nothing measured says this port
+// could not do the same. An earlier comment here claimed the two were
+// indistinguishable "since a cell is a cell by the time the name is
+// taken"; that claim was wrong and `DIVERGENCE.md` no longer makes it.
+// This test pins TODAY'S behaviour so the repair is a deliberate change.
 //
 // `field.empty` reaches this in the DEFAULT mode, because the value is
 // dropped into a syntactically empty cell before any rule runs. It is the

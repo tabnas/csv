@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -226,20 +227,24 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	// column only where it builds one. The two sources of a field list have
 	// to be interchangeable, so this one widens rather than that one
 	// narrowing.
-	var fieldNames []any
-	if names, ok := fieldOpts["names"].([]string); ok {
-		for _, n := range names {
-			fieldNames = append(fieldNames, n)
-		}
-	} else if names, ok := fieldOpts["names"].([]any); ok {
-		// Every element is kept, whatever its type, because TS names a
-		// column with `obj[fields[fI]] = ...`, which CONVERTS the element
-		// rather than requiring a string: `names: [1, 2]` names columns
-		// "1" and "2". Keeping only the strings shortened the list
-		// instead, which renamed every column after the dropped one and
-		// changed the count `field.exact` compares a record against.
-		fieldNames = append(fieldNames, names...)
-	}
+	//
+	// Every element is kept, whatever its type, because TS names a column
+	// with `obj[fields[fI]] = ...`, which CONVERTS the element rather than
+	// requiring a string: `names: [1, 2]` names columns "1" and "2".
+	// Keeping only the strings shortened the list instead, which renamed
+	// every column after the dropped one and changed the count
+	// `field.exact` compares a record against.
+	//
+	// An EXPLICITLY EMPTY list stays non-nil. TS reads the field list as
+	// `ctx.u.fields || options.field.names`, and every array is truthy
+	// there, `[]` included, so `names: []` IS a field list: with
+	// `field.exact` on, a one-cell record is then one field too many and
+	// the parse fails with csv_extra_field. An append loop seeded from a
+	// nil slice leaves nil for an empty input, which the `fields != nil`
+	// guard below reads as "no field list at all" and the check is
+	// skipped. asSlice allocates before it appends, so the empty case
+	// keeps a non-nil zero-length slice.
+	fieldNames, _ := asSlice(fieldOpts["names"])
 
 	refs := map[jsonic.FuncRef]any{
 
@@ -675,12 +680,38 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 // returns make(cfg, opts) => matcher(lex).
 func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 	quote := toString(stringOpts["quote"])
+
+	// The canonical opens a quoted field with
+	// `quoteMap = { [options.string.quote]: true }` and then tests
+	// `quoteMap[src[sI]]`, and `src[sI]` is ONE UTF-16 code unit. So the
+	// canonical matcher can only ever fire for a quote that IS one code
+	// unit, and is inert for every other value of the option: the empty
+	// string, a multi-character quote such as `""`, and an astral
+	// character such as U+1F600, which JavaScript holds as a surrogate
+	// PAIR. `strings.HasPrefix` agreed with none of those. It matched a
+	// multi-character quote the canonical cannot match, matched an astral
+	// quote the same way, and -- worst -- returned true at every position
+	// for the EMPTY quote, because every string has the empty prefix, so
+	// the matcher consumed nothing, the lexer made no progress, and
+	// `string.quote: ""` HUNG the parse instead of returning.
+	//
+	// Measured against the canonical on `a,b\n"x y",z` and friends: the
+	// one-character quote `|` matches in both, while the two-character
+	// quote `""`, the two-character quote `ab`, the astral U+1F600 and
+	// the empty quote are inert in both once this guard is here.
+	quoteRune, quoteSize := utf8.DecodeRuneInString(quote)
+	singleCodeUnit := 0 < quoteSize && quoteSize == len(quote) && quoteRune <= 0xFFFF
+
 	return func(cfg *jsonic.LexConfig, opts *jsonic.Options) jsonic.LexMatcher {
 		return func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 			pnt := lex.Cursor()
 			src := lex.Src
 			sI := pnt.SI
 			srclen := len(src)
+
+			if !singleCodeUnit {
+				return nil
+			}
 
 			if sI >= srclen || !strings.HasPrefix(src[sI:], quote) {
 				return nil
@@ -1016,20 +1047,23 @@ func boolPtr(b bool) *bool {
 // through the lexer.
 //
 // ok is false when JavaScript cannot make a primitive of the value at
-// all, which is every OBJECT: a jsonic object is allocated with a null
-// prototype, so it inherits neither toString nor Symbol.toPrimitive and
-// the canonical runtime throws
+// all, which is a PARSED object: a jsonic object is allocated with a
+// null prototype, so it inherits neither toString nor Symbol.toPrimitive
+// and the canonical runtime throws
 // `TypeError: Cannot convert object to primitive value` instead of
-// naming the column. Neither port can raise a JavaScript TypeError, so
-// each refuses the document instead; see DIVERGENCE.md.
+// naming the column. This port cannot raise a JavaScript TypeError, so
+// it refuses the document instead; see DIVERGENCE.md.
 //
-// That holds for a PARSED object. An object supplied as an OPTION value
-// is the case this function cannot see: the canonical's option merge
-// rebuilds a plain source object onto Object.prototype on the way into
-// the bag, so String names the column "[object Object]" there and
-// nothing throws, even for one the caller made with Object.create(null).
-// This function is handed a cell, not its provenance, so it refuses that
-// one too. DIVERGENCE.md measures both.
+// An object supplied as an OPTION value is the OTHER case, and the
+// canonical answers it differently: the option merge rebuilds a plain
+// source object onto Object.prototype on the way into the bag, so String
+// names the column "[object Object]" there and nothing throws, even for
+// one the caller made with Object.create(null). This function CAN see
+// which is which, because the two arrive as different Go types: the
+// lexer builds *jsonic.OrderedMap, an option value stays the
+// map[string]any the caller wrote. An earlier version of this comment
+// said the provenance was invisible here and DIVERGENCE.md recorded the
+// refusal of the option route as unavoidable. Both were wrong.
 //
 // The last-resort `fmt.Sprintf("%v", v)` this used to end with is what
 // made that necessary: it put the engine's internal struct into a column
@@ -1049,12 +1083,73 @@ func jsKey(val any) (key string, ok bool) {
 		return "null", true
 	case []any:
 		return jsArrayKey(v)
+	case *jsonic.OrderedMap, jsonic.OrderedMap:
+		// A PARSED object. See the divergence above: the canonical throws
+		// rather than naming the column, so this port refuses instead.
+		// Listed explicitly so the reflect fallbacks below cannot claim
+		// it: an OrderedMap is a struct, not a Go map, but saying so out
+		// loud is what keeps the two routes apart when either type moves.
+		return "", false
 	default:
 		if f, isNumber := jsNumber(val); isNumber {
 			return jsNumberToString(f), true
 		}
+		// A slice of any element type, not just []any. `field.empty` and
+		// `field.names` are unconstrained Go options, so a caller writes
+		// the array Go makes easiest: []string{"a", "b"}, []int{1, 2},
+		// [][]string{...}. The lexer only ever builds []any, so the shared
+		// fixtures reach this site with []any alone and a type assertion
+		// on that one shape passed them while refusing every native
+		// spelling. JavaScript has one array type, and
+		// Array.prototype.toString joins whatever is in it, so each of
+		// these is the same array to the canonical runtime.
+		if items, isSlice := asSlice(val); isSlice {
+			return jsArrayKey(items)
+		}
+		// A Go MAP is an option value, never a parsed cell: the lexer
+		// builds *jsonic.OrderedMap, refused above. The canonical's option
+		// merge rebuilds a plain source object onto Object.prototype on
+		// the way into the bag, so String gives it "[object Object]" and
+		// nothing throws. Provenance is therefore readable from the Go
+		// type, and this port answers the option route exactly as the
+		// canonical does.
+		if reflect.ValueOf(val).Kind() == reflect.Map {
+			return "[object Object]", true
+		}
 		return "", false
 	}
+}
+
+// asSlice widens any Go slice or array to the []any the name-building
+// code works in. It reports false for everything else, INCLUDING a
+// string, whose Kind is neither Slice nor Array, so a string never
+// becomes a one-element list.
+//
+// The returned slice is non-nil whenever ok is true, the empty input
+// included. That matters for `field.names`: TS treats `[]` as a field
+// list, because every array is truthy there, and a nil slice here would
+// be read as no list at all.
+//
+// It always COPIES, a []any input included, so that a field list read
+// out of the option bag at install time cannot be changed afterwards by
+// a caller who still holds the slice they passed. jsKey keeps its own
+// []any case ahead of this one, so the hot path of naming a column from
+// a parsed array does not pay for the copy.
+func asSlice(val any) ([]any, bool) {
+	if val == nil {
+		return nil, false
+	}
+	rv := reflect.ValueOf(val)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+	default:
+		return nil, false
+	}
+	items := make([]any, 0, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		items = append(items, rv.Index(i).Interface())
+	}
+	return items, true
 }
 
 // jsNumber widens Go's numeric spellings to the float64 the lexer always

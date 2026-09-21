@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"math"
 	"testing"
+	"time"
 
 	jsonic "github.com/tabnas/jsonic/go"
 )
@@ -137,22 +138,54 @@ func TestJsKey(t *testing.T) {
 	}
 }
 
-// An object has no ToString to apply, at the top of a cell or anywhere
-// inside one, so jsKey refuses it rather than inventing a name. Before
-// this, the last-resort `fmt.Sprintf("%v", v)` put the engine's internal
-// struct into a column name: `&{[x] map[x:1] false}`.
-func TestJsKeyRefusesAnObject(t *testing.T) {
+// A PARSED object has no ToString to apply, at the top of a cell or
+// anywhere inside one, so jsKey refuses it rather than inventing a name.
+// Before this, the last-resort `fmt.Sprintf("%v", v)` put the engine's
+// internal struct into a column name: `&{[x] map[x:1] false}`.
+//
+// The refusal is keyed on the TYPE, which is what carries provenance
+// here: the lexer allocates a parsed object as *jsonic.OrderedMap, and
+// only that is refused.
+func TestJsKeyRefusesAParsedObject(t *testing.T) {
 	object := jsonic.NewOrderedMap()
 	object.Set("x", float64(1))
 	for _, value := range []any{
 		object,
-		map[string]any{"x": float64(1)},
 		[]any{object},
 		[]any{float64(1), object},
 		[]any{[]any{object}},
 	} {
 		if got, ok := jsKey(value); ok {
 			t.Errorf("jsKey(%#v) = %q, want a refusal", value, got)
+		}
+	}
+}
+
+// A plain Go MAP is the other route to the same site, and it is never a
+// parsed cell: it is an option value the caller wrote. The canonical's
+// option merge rebuilds it onto Object.prototype, so `String` names the
+// column "[object Object]" and nothing throws. jsKey answers that, for
+// every map spelling, and inside an array too, where join converts each
+// element by the same rules.
+func TestJsKeyNamesAnOptionObject(t *testing.T) {
+	for _, c := range []struct {
+		value    any
+		expected string
+	}{
+		{map[string]any{"x": float64(1)}, "[object Object]"},
+		{map[string]any{}, "[object Object]"},
+		{map[string]int{"x": 1}, "[object Object]"},
+		{map[string]string{"x": "y"}, "[object Object]"},
+		{[]any{map[string]any{"x": float64(1)}}, "[object Object]"},
+		{[]any{"a", map[string]any{}}, "a,[object Object]"},
+	} {
+		got, ok := jsKey(c.value)
+		if !ok {
+			t.Errorf("jsKey(%#v) refused the value, want %q", c.value, c.expected)
+			continue
+		}
+		if got != c.expected {
+			t.Errorf("jsKey(%#v) = %q, want %q", c.value, got, c.expected)
 		}
 	}
 }
@@ -402,16 +435,21 @@ func TestFieldNamesKeepsEveryElementWhateverItsType(t *testing.T) {
 // the canonical does NOT throw. The option merge rebuilds a plain source
 // object onto Object.prototype on the way into the bag, so `String`
 // gives it "[object Object]" whatever the caller wrote, an object made
-// with Object.create(null) included; that is measured in DIVERGENCE.md.
-// A PARSED cell is allocated with a null prototype and inherits no
-// toString at all, which is what throws. This port cannot tell one from
-// the other -- a cell is a cell by the time the name is taken -- so it
-// refuses both. DIVERGENCE.md records that, with the canonical results
-// measured beside these.
-func TestAnObjectOptionValueRefusesWhereTheCanonicalNamesTheColumn(t *testing.T) {
+// with Object.create(null) included. A PARSED cell is allocated with a
+// null prototype and inherits no toString at all, which is what throws.
+//
+// This port CAN tell one from the other, and the earlier claim in
+// DIVERGENCE.md that it could not was wrong. The two routes have
+// different Go types: the lexer builds *jsonic.OrderedMap, while an
+// option value the caller wrote stays the map[string]any it was written
+// as. So the option route is answered exactly as the canonical answers
+// it, and only the parsed route is refused. Every expectation below is
+// the canonical runtime's own output for the same input.
+func TestAnObjectOptionValueNamesTheColumnAsTheCanonicalDoes(t *testing.T) {
 	for _, c := range []struct {
-		src  string
-		opts map[string]any
+		src      string
+		opts     map[string]any
+		expected string
 	}{
 		// Reached in the DEFAULT mode: `field.empty` is dropped into a
 		// syntactically empty cell before any rule runs, and the header
@@ -419,22 +457,313 @@ func TestAnObjectOptionValueRefusesWhereTheCanonicalNamesTheColumn(t *testing.T)
 		// this one.
 		{",a\nx,y", map[string]any{
 			"field": map[string]any{"empty": map[string]any{"q": 1}},
-		}},
+		}, `[{"[object Object]":"x","a":"y"}]`},
+		// An object INSIDE an array joins as "[object Object]" too,
+		// because join converts each element by the same rules.
 		{",a\nx,y", map[string]any{
 			"field": map[string]any{"empty": []any{map[string]any{"q": 1}}},
-		}},
+		}, `[{"[object Object]":"x","a":"y"}]`},
+		// An empty object is still "[object Object]".
+		{",a\nx,y", map[string]any{
+			"field": map[string]any{"empty": map[string]any{}},
+		}, `[{"[object Object]":"x","a":"y"}]`},
+		// A map of some other Go type is the same one object to the
+		// canonical, which has one object type.
+		{",a\nx,y", map[string]any{
+			"field": map[string]any{"empty": map[string]int{"q": 1}},
+		}, `[{"[object Object]":"x","a":"y"}]`},
+		// `field.names` is the other option route to the same site.
 		{"x,y", map[string]any{
 			"header": false,
 			"field":  map[string]any{"names": []any{map[string]any{"q": 1}}},
-		}},
+		}, `[{"[object Object]":"x","field~1":"y"}]`},
 	} {
 		j := jsonic.Make()
 		j.UseDefaults(Csv, Defaults, c.opts)
 		result, err := j.Parse(c.src)
-		if err == nil {
-			t.Errorf("%v: parsed to %#v, want a refusal", c.opts, result)
+		if err != nil {
+			t.Errorf("%v: refused with %v, want %s", c.opts, err, c.expected)
 			continue
 		}
-		assertErrCode(t, c.src, err, "unexpected")
+		got, _ := json.Marshal(result)
+		if string(got) != c.expected {
+			t.Errorf("%v\n got %s\nwant %s", c.opts, got, c.expected)
+		}
+	}
+}
+
+// The bound on the fix above. A PARSED object cell keeps the null
+// prototype the lexer allocates it with, the canonical throws a
+// TypeError rather than naming the column, and this port still refuses
+// the document there. The type is what separates the two routes, so this
+// asserts the separation and not just the refusal: an option map names a
+// column in the very same parse that refuses a parsed one.
+func TestTheParsedObjectRefusalSurvivesTheOptionObjectFix(t *testing.T) {
+	// A parsed object cell, refused.
+	j := jsonic.Make()
+	j.UseDefaults(Csv, Defaults, map[string]any{"strict": false})
+	if result, err := j.Parse("a,{x:1}\nx,y"); err == nil {
+		t.Errorf("parsed object cell: got %#v, want a refusal", result)
+	} else {
+		assertErrCode(t, "parsed object cell", err, "unexpected")
+	}
+
+	// The same document, with an option object supplying the OTHER
+	// column name, in one parse: the option names its column and the
+	// parsed cell still refuses.
+	j2 := jsonic.Make()
+	j2.UseDefaults(Csv, Defaults, map[string]any{
+		"strict": false,
+		"field":  map[string]any{"empty": map[string]any{"q": 1}},
+	})
+	if result, err := j2.Parse("a,{x:1}\nx,y"); err == nil {
+		t.Errorf("parsed object cell beside an option object: got %#v, want a refusal", result)
+	} else {
+		assertErrCode(t, "parsed object cell beside an option object", err, "unexpected")
+	}
+
+	// And the option object alone, in the same non-strict mode, names
+	// its column.
+	j3 := jsonic.Make()
+	j3.UseDefaults(Csv, Defaults, map[string]any{
+		"strict": false,
+		"field":  map[string]any{"empty": map[string]any{"q": 1}},
+	})
+	result, err := j3.Parse(",a\nx,y")
+	if err != nil {
+		t.Fatalf("option object in non-strict mode: %v", err)
+	}
+	got, _ := json.Marshal(result)
+	if want := `[{"[object Object]":"x","a":"y"}]`; string(got) != want {
+		t.Errorf("option object in non-strict mode\n got %s\nwant %s", got, want)
+	}
+}
+
+// An ARRAY option value is whatever array Go spells most naturally, and
+// that is almost never []any: a caller writes []string{"a", "b"}. The
+// lexer only ever builds []any, so the shared fixtures reach the name
+// site with that one shape and a type assertion on it passed them while
+// refusing every native spelling. JavaScript has one array type and
+// Array.prototype.toString is join(','), so each of these is the same
+// array to the canonical, and each expectation below is its output.
+func TestAnArrayOptionValueNamesTheColumnWhateverGoSliceItIs(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		empty    any
+		expected string
+	}{
+		{"[]string", []string{"a", "b"}, `[{"a":"y","a,b":"x"}]`},
+		{"[]int", []int{1, 2}, `[{"1,2":"x","a":"y"}]`},
+		{"[]float64", []float64{1.5, 2}, `[{"1.5,2":"x","a":"y"}]`},
+		{"[]bool", []bool{true, false}, `[{"a":"y","true,false":"x"}]`},
+		{"[]any", []any{"a", "b"}, `[{"a":"y","a,b":"x"}]`},
+		// join recurses, so a nested array flattens.
+		{"[][]string", [][]string{{"a", "b"}, {"c"}}, `[{"a":"y","a,b,c":"x"}]`},
+		// A fixed-size array is an array to JavaScript too.
+		{"[2]string", [2]string{"a", "b"}, `[{"a":"y","a,b":"x"}]`},
+		// An EMPTY array joins to the empty string, which is a name.
+		{"[]string{}", []string{}, `[{"":"x","a":"y"}]`},
+		{"[]any{}", []any{}, `[{"":"x","a":"y"}]`},
+	} {
+		j := jsonic.Make()
+		j.UseDefaults(Csv, Defaults, map[string]any{
+			"field": map[string]any{"empty": c.empty},
+		})
+		result, err := j.Parse(",a\nx,y")
+		if err != nil {
+			t.Errorf("field.empty %s: refused with %v, want %s", c.name, err, c.expected)
+			continue
+		}
+		got, _ := json.Marshal(result)
+		if string(got) != c.expected {
+			t.Errorf("field.empty %s\n got %s\nwant %s", c.name, got, c.expected)
+		}
+	}
+
+	// `field.names` reaches the same conversion, and takes the same
+	// widening: a native []int names columns "1" and "2", as
+	// `names: [1, 2]` does in the canonical.
+	j := jsonic.Make()
+	j.UseDefaults(Csv, Defaults, map[string]any{
+		"header": false,
+		"field":  map[string]any{"names": []int{1, 2}},
+	})
+	result, err := j.Parse("x,y")
+	if err != nil {
+		t.Fatalf("field.names []int: %v", err)
+	}
+	got, _ := json.Marshal(result)
+	if want := `[{"1":"x","2":"y"}]`; string(got) != want {
+		t.Errorf("field.names []int\n got %s\nwant %s", got, want)
+	}
+
+	// A STRING is not a list of characters here. Its Kind is neither
+	// Slice nor Array, so it never becomes a one-element list, and it
+	// names the column as itself.
+	js := jsonic.Make()
+	js.UseDefaults(Csv, Defaults, map[string]any{
+		"field": map[string]any{"empty": "ab"},
+	})
+	sres, err := js.Parse(",a\nx,y")
+	if err != nil {
+		t.Fatalf(`field.empty "ab": %v`, err)
+	}
+	sgot, _ := json.Marshal(sres)
+	if want := `[{"a":"y","ab":"x"}]`; string(sgot) != want {
+		t.Errorf("field.empty \"ab\"\n got %s\nwant %s", sgot, want)
+	}
+}
+
+// An EXPLICITLY EMPTY `field.names` is a field list, not an absent one.
+//
+// TS reads the list as `ctx.u.fields || options.field.names`, and every
+// array is truthy there, `[]` included, so `names: []` reaches the
+// `field.exact` check with length 0 and a one-cell record is one field
+// too many. Building the Go list with an append loop seeded from a nil
+// slice left nil for an empty input, the `fields != nil` guard read that
+// as "no field list", and the documented option silently did nothing.
+// Both expectations are the canonical runtime's.
+func TestAnExplicitlyEmptyFieldNamesListIsStillAFieldList(t *testing.T) {
+	for _, names := range []any{[]string{}, []any{}, [0]string{}} {
+		// With field.exact, one cell is one field too many.
+		j := jsonic.Make()
+		j.UseDefaults(Csv, Defaults, map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": names, "exact": true},
+		})
+		if result, err := j.Parse("x"); err == nil {
+			t.Errorf("names %#v with field.exact: parsed to %#v, want csv_extra_field",
+				names, result)
+		} else {
+			assertErrCode(t, "empty field.names with field.exact", err, "csv_extra_field")
+		}
+
+		// An empty document has no record, so nothing is compared and
+		// the parse succeeds, as it does in the canonical.
+		je := jsonic.Make()
+		je.UseDefaults(Csv, Defaults, map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": names, "exact": true},
+		})
+		result, err := je.Parse("")
+		if err != nil {
+			t.Errorf("names %#v with field.exact on empty input: %v", names, err)
+		} else if got, _ := json.Marshal(result); string(got) != "[]" {
+			t.Errorf("names %#v on empty input\n got %s\nwant []", names, got)
+		}
+
+		// Without field.exact the empty list names no column, and every
+		// cell falls through to the nonameprefix loop.
+		jn := jsonic.Make()
+		jn.UseDefaults(Csv, Defaults, map[string]any{
+			"header": false,
+			"field":  map[string]any{"names": names},
+		})
+		nres, err := jn.Parse("x")
+		if err != nil {
+			t.Errorf("names %#v without field.exact: %v", names, err)
+			continue
+		}
+		got, _ := json.Marshal(nres)
+		if want := `[{"field~0":"x"}]`; string(got) != want {
+			t.Errorf("names %#v without field.exact\n got %s\nwant %s", names, got, want)
+		}
+	}
+
+	// A value that is not a list at all IS absent, and field.exact has
+	// nothing to compare against, so the same document parses.
+	j := jsonic.Make()
+	j.UseDefaults(Csv, Defaults, map[string]any{
+		"header": false,
+		"field":  map[string]any{"names": nil, "exact": true},
+	})
+	result, err := j.Parse("x")
+	if err != nil {
+		t.Fatalf("names nil with field.exact: %v", err)
+	}
+	got, _ := json.Marshal(result)
+	if want := `[{"field~0":"x"}]`; string(got) != want {
+		t.Errorf("names nil with field.exact\n got %s\nwant %s", got, want)
+	}
+}
+
+// `string.quote` is a STRING option with the same shape of defect. The
+// canonical opens a quoted field with `quoteMap[src[sI]]`, and `src[sI]`
+// is ONE UTF-16 code unit, so its matcher can only ever fire for a quote
+// that is exactly one code unit and is inert for every other value.
+//
+// strings.HasPrefix agreed with none of that. It matched a multi-
+// character quote and an astral one, which the canonical cannot match,
+// and for the EMPTY quote it returned true at every position, so the
+// matcher consumed nothing and `string.quote: ""` HUNG the parse. Each
+// expectation below is the canonical runtime's output, and the test is
+// bounded so a regression fails rather than hangs the suite.
+func TestADegenerateQuoteIsInertRatherThanGreedy(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		quote    string
+		src      string
+		expected string
+	}{
+		// One code unit: the matcher fires, in both runtimes.
+		{"single char", "|", "a,b\n|x y|,z", `[{"a":"x y","b":"z"}]`},
+		// Two characters: inert, so the text stays as written.
+		{"two chars", "ab", "a,b\nabx yab,z", `[{"a":"abx yab","b":"z"}]`},
+		// An astral character is a surrogate PAIR in JavaScript, so it is
+		// two code units and the canonical never matches it either.
+		{"astral", "\U0001F600", "a,b\n\U0001F600x y\U0001F600,z",
+			"[{\"a\":\"\U0001F600x y\U0001F600\",\"b\":\"z\"}]"},
+	} {
+		done := make(chan struct{})
+		var got []byte
+		var perr error
+		go func() {
+			defer close(done)
+			j := jsonic.Make()
+			j.UseDefaults(Csv, Defaults, map[string]any{
+				"string": map[string]any{"quote": c.quote},
+			})
+			result, err := j.Parse(c.src)
+			if err != nil {
+				perr = err
+				return
+			}
+			got, _ = json.Marshal(result)
+		}()
+		select {
+		case <-done:
+		case <-time.After(20 * time.Second):
+			t.Fatalf("string.quote %s: the parse did not finish", c.name)
+		}
+		if perr != nil {
+			t.Errorf("string.quote %s: %v", c.name, perr)
+			continue
+		}
+		if string(got) != c.expected {
+			t.Errorf("string.quote %s\n got %s\nwant %s", c.name, got, c.expected)
+		}
+	}
+
+	// The empty quote is the one that hung: every string has the empty
+	// prefix, so the matcher matched at every position and consumed
+	// nothing. It must now simply RETURN. What it returns is bounded by
+	// a separate, pre-existing difference in how this port disables the
+	// standard jsonic string lexer in strict mode, so this asserts
+	// termination and a parse, not the canonical's exact value.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		j := jsonic.Make()
+		j.UseDefaults(Csv, Defaults, map[string]any{
+			"string": map[string]any{"quote": ""},
+		})
+		if _, err := j.Parse("a,b\n\"x y\",z"); err != nil {
+			t.Errorf(`string.quote "": %v`, err)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal(`string.quote "": the parse did not finish`)
 	}
 }

@@ -143,28 +143,41 @@ runtime. That is asserted alongside the divergence in both ports, and it
 is the one row of [`test/spec/unstrict.tsv`](test/spec/unstrict.tsv) with
 strict ON, kept there so the bound sits beside what it bounds.
 
-**The same cell from an option value.** A parsed cell is not the only way
-an object reaches the conversion. `field.empty` is dropped into a
-syntactically empty cell before any rule runs, and the header row is a row
-like any other, so `,a` under `{field: {empty: <value>}}` takes its first
-column name from that option; `field.names` supplies the whole field list
-the same way. The canonical answers an object from there DIFFERENTLY, and
-what decides is PROVENANCE, not anything the caller chose. The engine
-deep-merges an option bag, so a plain source object is rebuilt as a fresh
-`{}` on the way in and carries `Object.prototype` out the other side.
-`String` therefore gives it `[object Object]` and nothing throws, even for
-an object the caller built with `Object.create(null)`, which is measured
-in the table below. A PARSED cell keeps the null prototype the engine
-allocates it with, inherits no `toString`, and throws. Neither port can
-tell one from the other, since a cell is a cell by the time the name is
-taken:
+**The same cell from an option value, and an entry that was wrong.** A
+parsed cell is not the only way an object reaches the conversion.
+`field.empty` is dropped into a syntactically empty cell before any rule
+runs, and the header row is a row like any other, so `,a` under
+`{field: {empty: <value>}}` takes its first column name from that option;
+`field.names` supplies the whole field list the same way. The canonical
+answers an object from there DIFFERENTLY, and what decides is
+PROVENANCE, not anything the caller chose. The engine deep-merges an
+option bag, so a plain source object is rebuilt as a fresh `{}` on the
+way in and carries `Object.prototype` out the other side. `String`
+therefore gives it `[object Object]` and nothing throws, even for an
+object the caller built with `Object.create(null)`. A PARSED cell keeps
+the null prototype the engine allocates it with, inherits no `toString`,
+and throws.
+
+An earlier version of this entry claimed that neither port could tell the
+two apart, "since a cell is a cell by the time the name is taken", and
+recorded the resulting refusal as a divergence owned jointly with the
+canonical. **That claim was false, and the entry should never have been
+written.** The Go port carries the provenance in the value's TYPE: the
+lexer allocates a parsed object as `*jsonic.OrderedMap`, while an option
+value stays the `map[string]any` the caller wrote. Measured, on
+2026-09-21, by printing `%T` at both sites: `parsed {x:1} =>
+*tabnas.OrderedMap`, `option map => map[string]interface {}`. Go now
+answers the option route exactly as the canonical does, and refuses only
+the parsed route:
 
 | input | options | TypeScript | Go | Rust |
 |---|---|---|---|---|
-| `,a\nx,y` | `field.empty: {q:1}` | `[{"[object Object]":"x","a":"y"}]` | `ERROR:unexpected` | `ERROR:unexpected` |
+| `,a\nx,y` | `field.empty: {q:1}` | `[{"[object Object]":"x","a":"y"}]` | the same | `ERROR:unexpected` |
+| `,a\nx,y` | `field.empty: {}` | `[{"[object Object]":"x","a":"y"}]` | the same | `ERROR:unexpected` |
 | `,a\nx,y` | `field.empty: Object.create(null)` with `q` set | `[{"[object Object]":"x","a":"y"}]` | no such spelling | no such spelling |
-| `,a\nx,y` | `field.empty: [{q:1}]` | `[{"[object Object]":"x","a":"y"}]` | `ERROR:unexpected` | `ERROR:unexpected` |
-| `x,y` | `header: false`, `field.names: [{q:1}]` | `[{"[object Object]":"x","field~1":"y"}]` | `ERROR:unexpected` | refused when the options are read |
+| `,a\nx,y` | `field.empty: [{q:1}]` | `[{"[object Object]":"x","a":"y"}]` | the same | `ERROR:unexpected` |
+| `,a\nx,y` | `field.empty: ['a','b']` | `[{"a,b":"x","a":"y"}]` | the same | the same |
+| `x,y` | `header: false`, `field.names: [{q:1}]` | `[{"[object Object]":"x","field~1":"y"}]` | the same | refused when the options are read |
 | `x,y` | `header: false`, `field.names: [1,2]` | `[{"1":"x","2":"y"}]` | the same | refused when the options are read |
 
 Measured in the DEFAULT mode, so this route is not bounded by strict mode
@@ -180,44 +193,47 @@ is the case that looks like it should throw and does not, and a reader
 who assumes the prototype travels with the caller's object will predict
 the wrong answer for it.
 
-The last two rows are a second, smaller difference in the same place.
-`field.names` in the Rust port is typed `Option<Vec<String>>`, so a
-non-string element is refused when the options are read, before any
-document is parsed, where the canonical converts the element at the name
-site and Go now does the same. Widening the Rust option is a breaking
-change to a public type, so it waits for the next major rather than
-landing here. Go used to DROP a non-string name, which renamed every
-column after the dropped one and shortened the count `field.exact`
-compares a record against; that was a port defect, not a divergence, and
-it is fixed.
+**Owner of what is left here: the Rust port, and it is a PORT DEFECT
+rather than an impossibility.** Two different things keep Rust in the
+table. `field.names` is typed `Option<Vec<String>>`, so a non-string
+element is refused when the options are read, before any document is
+parsed; widening that public type is a breaking change, so it waits for
+the next major. `field.empty` is typed `serde_json::Value` and CAN hold
+an object, and Rust refuses it at the name site exactly as Go used to.
+Nothing measured here says Rust cannot make the same distinction Go
+makes, and this entry does not claim it: the Go fix is the evidence that
+the distinction is available, and the same repair is open in `rs/`. Do
+not copy the refusal into a new port.
 
 **Pinned by.** `TestAnObjectHeaderCellRefusesTheDocument`,
 `TestAnObjectHeaderCellIsTextInStrictMode`,
-`TestTheObjectRefusalReachesOnlyABuiltColumnName` and
-`TestFieldExactUsesAHeaderThatWasNeverConverted` in
+`TestTheObjectRefusalReachesOnlyABuiltColumnName`,
+`TestFieldExactUsesAHeaderThatWasNeverConverted` and
+`TestTheParsedObjectRefusalSurvivesTheOptionObjectFix` in
 [`go/js_key_test.go`](go/js_key_test.go), and
 `an_object_header_cell_refuses_the_document`,
 `an_object_header_cell_is_text_in_strict_mode`,
-`the_object_refusal_reaches_only_a_built_column_name` and
-`field_exact_uses_a_header_that_was_never_converted` in
-[`rs/tests/csv_test.rs`](rs/tests/csv_test.rs). The scope table above is
-pinned for all three runtimes in
-[`test/spec/unstrict.tsv`](test/spec/unstrict.tsv). The option-value table
-is pinned by `TestAnObjectOptionValueRefusesWhereTheCanonicalNamesTheColumn`
-and `TestFieldNamesKeepsEveryElementWhateverItsType` in
-[`go/js_key_test.go`](go/js_key_test.go), and by
+`the_object_refusal_reaches_only_a_built_column_name`,
+`field_exact_uses_a_header_that_was_never_converted`,
 `an_object_option_value_refuses_where_the_canonical_names_the_column` and
 `field_names_are_strings_in_this_port_alone` in
-[`rs/tests/csv_test.rs`](rs/tests/csv_test.rs). No row of it can be a
-shared fixture row: such a row carries ONE expected cell, and no row of
-that table has all three runtimes agreeing on one.
+[`rs/tests/csv_test.rs`](rs/tests/csv_test.rs). The scope table above is
+pinned for all three runtimes in
+[`test/spec/unstrict.tsv`](test/spec/unstrict.tsv). The Go column of the
+option-value table is pinned by
+`TestAnObjectOptionValueNamesTheColumnAsTheCanonicalDoes`,
+`TestAnArrayOptionValueNamesTheColumnWhateverGoSliceItIs` and
+`TestFieldNamesKeepsEveryElementWhateverItsType` in
+[`go/js_key_test.go`](go/js_key_test.go). Only the `field.empty:
+['a','b']` row of that table could be a shared fixture row, because a
+fixture row carries ONE expected cell and that is the one row where all
+three runtimes agree on a value; the rest cannot, which is why each port
+pins them itself.
 
-**Owner.** The canonical TypeScript. The repair is for `ts/src/csv.ts` to
-decide what an object header cell means, either a defined name or a
-declared CSV error code, instead of letting the language throw. When it
-does, both ports follow it and this entry goes. The option-value rows are
-owned jointly: the canonical's answer there turns on whether the option
-merge rebuilt the object or the lexer allocated it, which is provenance
-the ports' value model does not carry, so a port could match it only by
-tracking where the cell came from. The `field.names` rows are the Rust
-port's alone, and go when its option type widens.
+**Owner.** The canonical TypeScript, for the PARSED object cell. The
+repair is for `ts/src/csv.ts` to decide what an object header cell means,
+either a defined name or a declared CSV error code, instead of letting
+the language throw. When it does, both ports follow it and that part of
+this entry goes. The option-value rows are the Rust port's alone, and go
+when it reads provenance off its own value types the way Go does, and
+when its `field.names` option type widens.

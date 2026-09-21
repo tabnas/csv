@@ -246,7 +246,13 @@ column `[object Object]` there rather than throwing — because the option
 merge rebuilds a plain source object onto `Object.prototype`, even one
 the caller made with `Object.create(null)`, while a parsed cell keeps the
 null prototype the engine gives it and inherits no `toString` at all.
-`DIVERGENCE.md` measures that route beside this one.
+`DIVERGENCE.md` measures that route beside this one. **The Go port now
+answers the option route exactly as the canonical does**, because the two
+routes have different Go TYPES: the lexer allocates a parsed object as
+`*jsonic.OrderedMap`, while an option value stays the `map[string]any`
+the caller wrote. An earlier entry claimed no port could tell them apart;
+that was wrong and has been removed. Only Rust still refuses there, and
+that is a port defect to repair, not an impossibility.
 
 - **`field.exact` error *code* (Go) — FIXED, do not re-add the workaround.**
   This used to be listed here because `jsonic/go` surfaced every

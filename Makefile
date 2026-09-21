@@ -25,8 +25,20 @@ embed:
 	cd ts && node embed-grammar.js
 
 # --- TypeScript (package in ts/) ---
-build-ts:
-	cd ts && npm run build
+#
+# `embed` as a prerequisite, then COMPILE ONLY.
+#
+# npm's own `build` script is `node embed-grammar.js && tsc --build ...`,
+# so calling it here ran the embedder a second time. Under `make -j` that
+# second run overlapped the `embed` target above, and the two rewrite the
+# same three source files; it also overlapped `build-go` and `build-rs`,
+# which READ those files. The embedder now renames a finished temp file
+# over each target instead of truncating it in place, so a torn read is
+# no longer possible either way, but there is no reason to embed twice:
+# make builds `embed` exactly once however many targets ask for it, so
+# this leaves exactly one writer in the graph.
+build-ts: embed
+	cd ts && npm run compile
 
 test-ts:
 	cd ts && npm test
@@ -39,7 +51,13 @@ publish-ts: test-ts
 	cd ts && npm publish --access public
 
 # --- Go (module in go/) ---
-build-go:
+#
+# `embed` first, as build-ts and build-rs have it: go/csv.go carries the
+# grammar as grammarText, so a focused build after an edit to
+# csv-grammar.jsonic otherwise compiles the previous text and succeeds.
+# It also keeps this reader of go/csv.go ordered after the one writer of
+# it, which is what `make -j build` needs.
+build-go: embed
 	cd go && go build ./...
 
 test-go:
@@ -63,8 +81,8 @@ publish-go: test-go
 
 # --- Rust (crate in rs/) ---
 #
-# `embed` first, the same ordering ts/Makefile gives build-rs and build-go
-# and that npm's own `build` script gives build-ts. rs/src/lib.rs carries
+# `embed` first, the same ordering every other build target here has now
+# and the same ordering ts/Makefile gives. rs/src/lib.rs carries
 # the grammar as GRAMMAR_TEXT, the same jsonic text the other two embed,
 # and the crate parses it at load; so without this, a focused build after
 # an edit to csv-grammar.jsonic compiles the previous text and succeeds.

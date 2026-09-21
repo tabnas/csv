@@ -14,8 +14,12 @@ embed:
 	node embed-grammar.js
 
 # TypeScript
-build-ts:
-	npm run build
+#
+# `embed` as a prerequisite, then COMPILE ONLY, so that `make -j build`
+# has exactly one embedder in the graph rather than this one and the one
+# inside npm's `build` script. See the root Makefile for the detail.
+build-ts: embed
+	npm run compile
 
 test-ts:
 	npm test
@@ -35,8 +39,8 @@ clean-go:
 
 # Rust (the crate in ../rs; the engine is a sibling checkout)
 #
-# `embed` first, as build-go has it and as npm's own `build` script gives
-# build-ts. rs/src/lib.rs carries the grammar as GRAMMAR_TEXT, the same
+# `embed` first, as build-go and build-ts have it.
+# ../rs/src/lib.rs carries the grammar as GRAMMAR_TEXT, the same
 # jsonic text the other two embed, and the crate parses it at load; so
 # without this, a focused build after an edit to ../csv-grammar.jsonic
 # compiles the previous text and succeeds. The drift tripwire is a test,
