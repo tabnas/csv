@@ -525,9 +525,78 @@ fn token_text(token: &Token) -> String {
     }
 }
 
-/// A header cell as a column name.
-fn key_text(value: &Value) -> String {
-    value_text(value)
+/// A header cell as a column name: `obj[cell] = ...` applies
+/// ToPropertyKey, which for anything but a symbol is ToString.
+///
+/// Called from the one place the canonical converts a cell, the object
+/// shaping in [`record_before_close`], and never on the header row
+/// itself, which is stored raw. A reading that takes no name from a cell
+/// -- `object: false`, `header: false`, a header-only document, or a
+/// `field.exact` mismatch, which is checked first -- never reaches this.
+///
+/// `None` means JavaScript cannot make a primitive of the value at all,
+/// which is every OBJECT. A jsonic object is allocated with a null
+/// prototype, so it inherits neither `toString` nor `Symbol.toPrimitive`
+/// and the canonical runtime throws
+/// `TypeError: Cannot convert object to primitive value` instead of
+/// naming the column. This port cannot raise a JavaScript `TypeError`, so
+/// it refuses the document; `DIVERGENCE.md` records that choice.
+///
+/// That holds for a PARSED object. An object supplied as an OPTION value
+/// is the case this function cannot see: the canonical's option merge
+/// rebuilds a plain source object onto `Object.prototype` on the way into
+/// the bag, so `String` names the column `[object Object]` there and
+/// nothing throws, even for one the caller made with
+/// `Object.create(null)`. This function is handed a cell, not its
+/// provenance, so it refuses that one too. `DIVERGENCE.md` measures both.
+///
+/// Falling through to [`value_text`] is what made that necessary: its
+/// last-resort arm renders the value as JSON, which named the column
+/// `{"x":1.0}` for `{x:1}` and `[1.0,2.0]` for `[1,2]`, neither of which
+/// the canonical runtime produces for any input.
+fn key_text(value: &Value) -> Option<String> {
+    match value {
+        Value::Undefined
+        | Value::Null
+        | Value::Bool(_)
+        | Value::Number(_)
+        | Value::String(_)
+        | Value::Text(_) => Some(value_text(value)),
+        Value::Array(items) => join_text(items),
+        // An object, and the two reference wrappers the engine keeps for
+        // its own bookkeeping, have no ToString to apply.
+        _ => None,
+    }
+}
+
+/// `Array.prototype.toString`, which is `join(',')` with no separator
+/// argument (ECMA-262 23.1.3.17 and 23.1.3.34): every element is
+/// converted by the same rules, `null` and `undefined` become the empty
+/// string, and a nested array joins recursively, so `[1,[2,3]]` flattens
+/// to `1,2,3` and `[]` is the empty string.
+///
+/// A null ELEMENT is the empty string while a null CELL is `null`: the
+/// empty string comes from `join`, not from ToString, so it applies only
+/// inside an array.
+///
+/// The recursion needs no depth bound and no seen-set. A parsed value is
+/// a TREE: the engine folds each finished rule's value into its parent
+/// and never stores a reference to an ancestor, so no element can reach
+/// its own array and the walk always terminates. Its depth is the
+/// document's bracket nesting, which `tabnas-jsonic` already bounds at
+/// 127 containers with the parse budget this plugin inherits.
+fn join_text(items: &[Value]) -> Option<String> {
+    let mut joined = String::new();
+    for (index, item) in items.iter().enumerate() {
+        if 0 < index {
+            joined.push(',');
+        }
+        match item {
+            Value::Null | Value::Undefined => {}
+            other => joined.push_str(&key_text(other)?),
+        }
+    }
+    Some(joined)
 }
 
 fn number(value: usize) -> Value {
@@ -672,17 +741,29 @@ fn record_before_close(
 ) -> Result<Option<Token>, ActionError> {
     move |rule, context, _next, out| {
         let record_i = record_index(context);
-        let fields: Option<Vec<String>> = match context.u.get("fields") {
-            Some(Value::Array(names)) => Some(names.iter().map(key_text).collect()),
-            _ => settings.names.clone(),
+        // The field list is held as the RAW cells, the way the canonical
+        // holds `ctx.u.fields`, because a cell becomes a column NAME only
+        // where an object record is built. `field.names` widens into the
+        // same shape so the two sources stay interchangeable.
+        let fields: Option<Vec<Value>> = match context.u.get("fields") {
+            Some(Value::Array(names)) => Some(names.as_ref().clone()),
+            _ => settings.names.as_ref().map(|names| {
+                names
+                    .iter()
+                    .map(|name| Value::String(name.clone()))
+                    .collect()
+            }),
         };
 
         if record_i == 0 && settings.header {
-            let names: Vec<Value> = items_of(&rule.child_node)
-                .iter()
-                .map(|cell| Value::String(key_text(cell)))
-                .collect();
-            context.u.insert("fields".to_string(), Value::array(names));
+            // Kept exactly as parsed, which is what the canonical keeps:
+            // `ctx.u.fields = r.child.node`. Nothing is converted here,
+            // and an empty list is still a field list, as it is in
+            // JavaScript where `[]` is truthy.
+            context.u.insert(
+                "fields".to_string(),
+                Value::array(items_of(&rule.child_node)),
+            );
         } else {
             let mut record = items_of(&rule.child_node);
 
@@ -724,8 +805,32 @@ fn record_before_close(
                 let mut object = IndexMap::new();
                 let mut index = 0;
                 if let Some(fields) = fields.as_ref() {
-                    for (position, name) in fields.iter().enumerate() {
-                        object.insert(name.clone(), filled(record.get(position)));
+                    for (position, cell) in fields.iter().enumerate() {
+                        // This is the ONE place a header cell becomes a
+                        // column name, and the only place the canonical
+                        // converts one: `obj[fields[fI]] = ...` puts the
+                        // raw cell through ToPropertyKey, which for
+                        // anything but a symbol is ToString.
+                        //
+                        // An OBJECT has no ToString at all, and the
+                        // canonical runtime throws a TypeError here rather
+                        // than naming the column. This port cannot raise
+                        // one, so it refuses the document with the
+                        // engine's inherited `unexpected` code instead of
+                        // inventing a name; `DIVERGENCE.md` records that
+                        // choice. Refusing at the header row instead was
+                        // too early: it also refused an `object: false`
+                        // parse and a header-only document, neither of
+                        // which ever asks for a name, and both of which
+                        // the canonical returns a value for.
+                        let Some(name) = key_text(cell) else {
+                            let mut token = context.t0().cloned().unwrap_or_else(|| {
+                                Token::new("#BD", TIN_BD, Value::Undefined, "", Default::default())
+                            });
+                            token.bad("unexpected");
+                            return Ok(Some(token));
+                        };
+                        object.insert(name, filled(record.get(position)));
                     }
                     index = fields.len();
                 }

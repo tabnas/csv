@@ -377,41 +377,245 @@ fn number() {
 // that reach a key: negative zero keeps its sign (`-0`), the exponent
 // thresholds at 1e21 and 1e-7 are never taken, and a large integral float
 // prints its exact binary value (`123456789012345683968`) rather than its
-// shortest round-tripping digits. Every expectation below was taken from
-// ts/src/csv.ts.
+// shortest round-tripping digits.
 //
-// This is deliberately NOT a shared `test/spec` row. The Go port names
-// EVERY numeric header cell "" -- `names[i], _ = v.(string)` in
-// go/csv.go drops a non-string -- so a shared row would fail there. It
-// belongs in test/spec the moment Go is fixed.
+// Those cases now live in `test/spec/number.tsv`, where all three
+// runtimes run them. They were a Rust-only test while the Go port named
+// every non-string header cell "", which also collapsed the columns onto
+// one key; that is fixed, so the coverage moved to the shared fixture
+// rather than staying in one runtime.
+//
+// An ARRAY header cell is named the same way, through
+// `Array.prototype.toString`, which is `join(',')`. Those cases live in
+// `test/spec/unstrict.tsv`, again in all three runtimes.
+
+// DIVERGENCE (see ../../DIVERGENCE.md): an OBJECT header cell.
+//
+// The canonical TypeScript throws a raw JavaScript
+// `TypeError: Cannot convert object to primitive value`, because a jsonic
+// object is allocated with a null prototype and so has no `toString`.
+// This port cannot raise a JavaScript `TypeError`, so it refuses the
+// document with the engine's inherited `unexpected` code instead of
+// inventing a column name the canonical never produces. That is why the
+// case cannot be a shared fixture row: the canonical does not fail with a
+// parse error, it throws.
+//
+// Asserted in both directions, so a repair fails as loudly as a
+// regression: the parse must FAIL, and with the code recorded. Before
+// this, the document parsed and the column was named `{"x":1.0}`, a JSON
+// render of the cell.
 #[test]
-fn a_numeric_header_cell_is_named_the_way_javascript_names_it() {
-    for (src, key) in [
-        ("-0\nx", "0"),
-        ("0\nx", "0"),
-        ("1\nx", "1"),
-        ("1e2\nx", "100"),
-        ("-1.5\nx", "-1.5"),
-        // The upper exponent threshold: 1e21 switches to exponent form,
-        // everything below it spells out.
-        ("1e20\nx", "100000000000000000000"),
-        ("1e21\nx", "1e+21"),
-        ("1e22\nx", "1e+22"),
-        // The lower one: 1e-7 switches, 1e-6 does not.
-        ("0.000001\nx", "0.000001"),
-        ("1e-7\nx", "1e-7"),
-        ("1.5e-7\nx", "1.5e-7"),
-        // Shortest round-tripping digits, not the exact binary value.
-        ("123456789012345680000\nx", "123456789012345680000"),
+fn an_object_header_cell_refuses_the_document() {
+    for src in [
+        "a,{x:1}\nx,y",
+        "a,[{x:1}]\nx,y",
+        "a,[1,{x:1}]\nx,y",
+        "{x:1},a\nx,y",
+        // The cell is the whole header.
+        "{x:1}\nx",
+        // A SHORT data row still runs the name loop to the header's
+        // length, filling the missing cell with `field.empty`, so the name
+        // is still taken. `field.exact` is off here; with it on the length
+        // check wins instead, which is
+        // `field_exact_uses_a_header_that_was_never_converted`.
+        "a,{x:1}\nx",
+        // The first data record is where it stops.
+        "a,{x:1}\nx,y\np,q",
     ] {
-        let mut record = serde_json::Map::new();
-        record.insert(key.to_string(), Json::String("x".to_string()));
         assert_eq!(
-            must(src, json!({"number": true})),
-            Json::Array(vec![Json::Object(record)]),
-            "header key for {src:?}"
+            code_of(src, json!({"strict": false})),
+            "unexpected",
+            "{src}"
         );
     }
+}
+
+// The same cell is ordinary text in strict mode, where no field body is
+// parsed, so the refusal above cannot reach a default-options document.
+#[test]
+fn an_object_header_cell_is_text_in_strict_mode() {
+    assert_eq!(
+        must_default("a,{x:1}\nx,y"),
+        json!([{"a": "x", "{x:1}": "y"}])
+    );
+}
+
+// The refusal above must reach only a column name that is actually BUILT.
+// The canonical keeps the header row RAW (`ctx.u.fields = r.child.node`)
+// and applies ToPropertyKey in one place, `obj[fields[fI]] = ...`, which
+// runs only under `object: true` and only once there is a record to key.
+//
+// Refusing at the header row instead was too early, and these are the
+// documents it wrongly refused: measured against the canonical runtime,
+// which answers `[["x","y"]]` for the first three and `[]` for the rest,
+// while this port answered `unexpected` for every one of them.
+#[test]
+fn the_object_refusal_reaches_only_a_built_column_name() {
+    // `object: false` never applies ToPropertyKey at all: the header is
+    // kept for the field COUNT and later rows come back as arrays.
+    for src in ["a,{x:1}\nx,y", "{x:1},a\nx,y", "a,[1,{x:1}]\nx,y"] {
+        assert_eq!(
+            must(src, json!({"strict": false, "object": false})),
+            json!([["x", "y"]]),
+            "{src}"
+        );
+    }
+    // A header-only document has no record to key, under either shape.
+    for options in [
+        json!({"strict": false}),
+        json!({"strict": false, "object": false}),
+    ] {
+        for src in ["a,{x:1}", "a,{x:1}\n"] {
+            assert_eq!(must(src, options.clone()), json!([]), "{src} {options}");
+        }
+    }
+    // `header: false`: there is no header row, so the object is a field
+    // VALUE and no name is ever taken from it.
+    assert_eq!(
+        must("a,{x:1}\nx,y", json!({"strict": false, "header": false})),
+        json!([{"field~0": "a", "field~1": {"x": 1.0}}, {"field~0": "x", "field~1": "y"}])
+    );
+    assert_eq!(
+        must(
+            "a,{x:1}\nx,y",
+            json!({"strict": false, "header": false, "object": false})
+        ),
+        json!([["a", {"x": 1.0}], ["x", "y"]])
+    );
+    assert_eq!(
+        must(
+            "a,{x:1}\nx,y",
+            json!({"strict": false, "header": false, "field": {"names": ["p", "q"]}})
+        ),
+        json!([{"p": "a", "q": {"x": 1.0}}, {"p": "x", "q": "y"}])
+    );
+}
+
+// `field.exact` is measured against the LENGTH of the header row, which
+// the canonical reads off a header it has not converted. So it fires, and
+// fires first, on a header holding a cell that can never be named, under
+// either result shape. Both codes are what the canonical raises.
+#[test]
+fn field_exact_uses_a_header_that_was_never_converted() {
+    for options in [
+        json!({"strict": false, "object": false, "field": {"exact": true}}),
+        json!({"strict": false, "field": {"exact": true}}),
+    ] {
+        assert_eq!(
+            code_of("a,{x:1}\nx,y,z", options.clone()),
+            "csv_extra_field",
+            "{options}"
+        );
+        assert_eq!(
+            code_of("a,{x:1}\nx", options.clone()),
+            "csv_missing_field",
+            "{options}"
+        );
+    }
+}
+
+// `field.empty` is dropped into a syntactically empty cell, and the header
+// row is a row like any other, so an OPTION value can name a column
+// without ever passing the lexer. The expectations are the canonical
+// runtime's.
+//
+// This one guards a defect this port does NOT have, and it passes against
+// the code before the fix above as well as after. The Go port needed the
+// same widening as a repair: there an option value keeps whatever numeric
+// type the caller spelled it with (`42` is an `int`), and a conversion
+// that handled only the lexer's `float64` refused the document. Here
+// `Value::from_json` folds every JSON number into the one
+// `Value::Number(f64)` the lexer produces, and a typed caller can spell
+// `empty` only as a `serde_json::Value`, so an option value reaches the
+// conversion in the same variant a parsed one does.
+#[test]
+fn field_empty_names_a_column_from_an_option_value() {
+    for empty in [json!(42), json!(42.0)] {
+        assert_eq!(
+            must(",a\nx,y", json!({"field": {"empty": empty}})),
+            json!([{"42": "x", "a": "y"}]),
+            "{empty}"
+        );
+    }
+    for (empty, name) in [
+        (json!("e"), "e"),
+        (json!(true), "true"),
+        (json!(null), "null"),
+        (json!(1.5), "1.5"),
+        (json!([1, 2]), "1,2"),
+    ] {
+        assert_eq!(
+            must(",a\nx,y", json!({"field": {"empty": empty}})),
+            json!([{name: "x", "a": "y"}]),
+            "{empty}"
+        );
+    }
+}
+
+// An OBJECT reaches the conversion from an option value too, and there the
+// canonical does NOT throw. The option merge rebuilds a plain source
+// object onto `Object.prototype` on the way into the bag, so `String`
+// gives it "[object Object]" whatever the caller wrote, an object made
+// with `Object.create(null)` included; that is measured in
+// `DIVERGENCE.md`. A PARSED cell is allocated with a null prototype and
+// inherits no `toString` at all, which is what throws. This port refuses
+// both, which is a PORT DEFECT and not an impossibility: the Go port now
+// answers the option route exactly as the canonical does, by reading the
+// provenance off the value's type, and nothing measured says this port
+// could not do the same. An earlier comment here claimed the two were
+// indistinguishable "since a cell is a cell by the time the name is
+// taken"; that claim was wrong and `DIVERGENCE.md` no longer makes it.
+// This test pins TODAY'S behaviour so the repair is a deliberate change.
+//
+// `field.empty` reaches this in the DEFAULT mode, because the value is
+// dropped into a syntactically empty cell before any rule runs. It is the
+// one route by which the object divergence is not bounded by strict mode.
+#[test]
+fn an_object_option_value_refuses_where_the_canonical_names_the_column() {
+    for empty in [json!({"q": 1}), json!([{"q": 1}])] {
+        assert_eq!(
+            code_of(",a\nx,y", json!({"field": {"empty": empty}})),
+            "unexpected",
+            "{empty}"
+        );
+    }
+}
+
+// `field.names` is the other source of a field list. The canonical takes
+// any value and converts it where it builds the name, so `[1, 2]` names
+// columns "1" and "2" and an object element names "[object Object]". This
+// port types the option as `Option<Vec<String>>`, so a non-string element
+// is refused when the OPTIONS are read, before any document is parsed.
+// The Go port keeps the element and converts it at the name site, which
+// is what the canonical does; widening this one is a breaking change to a
+// public type, so `DIVERGENCE.md` carries it instead.
+#[test]
+fn field_names_are_strings_in_this_port_alone() {
+    for names in [json!([1, 2]), json!([{"q": 1}]), json!([true, null])] {
+        let mut parser = tabnas_jsonic::make();
+        let outcome = parser.use_plugin(
+            tabnas_csv::plugin(),
+            Some(Value::from_json(
+                &json!({"header": false, "field": {"names": names}}),
+            )),
+        );
+        match outcome {
+            Ok(_) => panic!("field.names {names} installed"),
+            Err(error) => assert!(
+                error.to_string().contains("expected a string"),
+                "{names}: {error}"
+            ),
+        }
+    }
+    // A string list is the supported spelling, and names the same columns
+    // the canonical names for `["1", "2"]`.
+    assert_eq!(
+        must(
+            "x,y",
+            json!({"header": false, "field": {"names": ["1", "2"]}})
+        ),
+        json!([{"1": "x", "2": "y"}])
+    );
 }
 
 // The same spelling reaches a field body, through the text rules that

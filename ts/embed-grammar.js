@@ -20,6 +20,51 @@ const END = '// --- END EMBEDDED csv-grammar.jsonic ---'
 
 const grammar = fs.readFileSync(GRAMMAR_FILE, 'utf8')
 
+// Replace a source file's contents WITHOUT ever leaving it truncated.
+//
+// `fs.writeFileSync` opens with O_TRUNC and then writes, so between those
+// two steps the file on disk is empty or half-written. Anything reading it
+// in that window sees a file with no BEGIN/END markers in it. That window
+// is reachable: `make -j build` can run this script while `npm run build`
+// runs it too, and `cargo build` / `tsc` / `go build` read the same three
+// files. Measured on a copy of the tree, a reader looping over
+// `go/csv.go` while this script rewrote it 120 times saw no BEGIN marker
+// in 420 of 61,017 reads -- 0.7% -- which is the state that makes a
+// second embedder print "Go markers not found" and exit 1.
+//
+// Writing a sibling temp file and renaming it over the target closes the
+// window: rename(2) is atomic within a directory, so a reader sees either
+// the whole old file or the whole new one, never a torn one. The embed is
+// idempotent, so the usual second run finds identical bytes and does not
+// write at all. Re-measured after this change, with the grammar toggled
+// between two texts so that every one of the 120 runs really wrote: 0
+// bad reads out of 45,118.
+function writeAtomic(file, next) {
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === next) {
+    return false
+  }
+  const tmp = file + '.embed-' + process.pid + '.tmp'
+  try {
+    fs.writeFileSync(tmp, next)
+    fs.renameSync(tmp, file)
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmp)
+    } catch (ignored) {
+      // The temp file was never created, or is already gone.
+    }
+    throw err
+  }
+  return true
+}
+
+function report(file, written) {
+  console.log(
+    (written ? 'Embedded grammar into' : 'Grammar already current in'),
+    file,
+  )
+}
+
 // --- TypeScript embedding ---
 function embedTS() {
   let src = fs.readFileSync(TS_FILE, 'utf8')
@@ -44,8 +89,7 @@ function embedTS() {
     END
 
   src = src.substring(0, startIdx) + replacement + src.substring(endIdx + END.length)
-  fs.writeFileSync(TS_FILE, src)
-  console.log('Embedded grammar into', TS_FILE)
+  report(TS_FILE, writeAtomic(TS_FILE, src))
 }
 
 // --- Go embedding ---
@@ -73,8 +117,7 @@ function embedGo() {
     END
 
   src = src.substring(0, startIdx) + replacement + src.substring(endIdx + END.length)
-  fs.writeFileSync(GO_FILE, src)
-  console.log('Embedded grammar into', GO_FILE)
+  report(GO_FILE, writeAtomic(GO_FILE, src))
 }
 
 // --- Rust embedding ---
@@ -104,8 +147,7 @@ function embedRust() {
     END
 
   src = src.substring(0, startIdx) + replacement + src.substring(endIdx + END.length)
-  fs.writeFileSync(RS_FILE, src)
-  console.log('Embedded grammar into', RS_FILE)
+  report(RS_FILE, writeAtomic(RS_FILE, src))
 }
 
 embedTS()

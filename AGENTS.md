@@ -33,6 +33,7 @@ There are three implementations that must behave identically — TypeScript
 | [`test/fixtures/`](test/fixtures/) | Shared conformance fixtures (`.csv` input → `.json` expected), run by every runtime. |
 | [`test/fixtures/manifest.json`](test/fixtures/manifest.json) | Drives the fixture suite (per-case names, options, `csvFile` aliases). |
 | [`test/spec/`](test/spec/) | Shared `.tsv` parity fixtures, auto-discovered by every runtime (see [`test/AGENTS.md`](test/AGENTS.md)). |
+| [`DIVERGENCE.md`](DIVERGENCE.md) | Every input for which a port's result differs from the canonical TypeScript, with the measured three-way table, the reason, the owner and the tests that pin it. A divergence goes here, never into prose alone. |
 | `test/suites/` | Third-party conformance corpora, fetched at pinned commits by [`scripts/fetch-csv-suites.sh`](scripts/fetch-csv-suites.sh). Gitignored. |
 | [`scripts/`](scripts/) | `fetch-csv-suites.sh` (fetch the corpora) and `extract-go-csv-cases.mjs` (turn Go's `reader_test.go` into `cases.json`). |
 | `ts/doc/csv-ts.md`, `go/doc/csv-go.md` | Per-runtime tutorial → how-to → reference → explanation docs. |
@@ -89,7 +90,10 @@ behaviour:
 Do not let the Go or Rust behaviour drift from TS. If a port genuinely
 cannot match because of an engine limitation, document the gap here and
 in the relevant `doc/*.md` Errors section rather than silently diverging
-(see "Known limitations").
+(see "Known limitations"). If it cannot match because the two languages
+differ, so that the same input yields a different RESULT, record it in
+[`DIVERGENCE.md`](DIVERGENCE.md) with a measured table and a test in each
+port.
 
 ## The grammar is embedded — never hand-edit the embedded block
 
@@ -224,6 +228,31 @@ all** — they test that Go's `NewReader` rejects a bad delimiter *rune*, which
 is API validation, not a document.
 
 ## Known limitations
+
+These are gaps in what a port can do. A gap that shows up as a DIFFERENT
+RESULT for the same input belongs in [`DIVERGENCE.md`](DIVERGENCE.md)
+instead, with a measured three-way table and a test in each port that
+pins it. One entry is there now: an object header cell in non-strict mode
+(`a,{x:1}`), which TypeScript answers with a raw JavaScript `TypeError`
+and both ports answer by refusing the document. The refusal fires only
+where the canonical actually takes a column NAME from that cell: on a
+data record, with `object` on, with a field list present, and only after
+the `field.exact` length check has passed. Every other reading of the
+same document still returns a value, `object: false` and a header-only
+document included. A PARSED object is the non-strict half of it; an
+object supplied as an OPTION value (`field.empty`, `field.names`) reaches
+the same conversion in the default mode, and the canonical names the
+column `[object Object]` there rather than throwing — because the option
+merge rebuilds a plain source object onto `Object.prototype`, even one
+the caller made with `Object.create(null)`, while a parsed cell keeps the
+null prototype the engine gives it and inherits no `toString` at all.
+`DIVERGENCE.md` measures that route beside this one. **The Go port now
+answers the option route exactly as the canonical does**, because the two
+routes have different Go TYPES: the lexer allocates a parsed object as
+`*jsonic.OrderedMap`, while an option value stays the `map[string]any`
+the caller wrote. An earlier entry claimed no port could tell them apart;
+that was wrong and has been removed. Only Rust still refuses there, and
+that is a port defect to repair, not an impossibility.
 
 - **`field.exact` error *code* (Go) — FIXED, do not re-add the workaround.**
   This used to be listed here because `jsonic/go` surfaced every

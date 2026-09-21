@@ -3,7 +3,10 @@
 package tabnascsv
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -219,16 +222,29 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	}
 	nonameprefix := toString(fieldOpts["nonameprefix"])
 	fieldExact := toBool(fieldOpts["exact"])
-	var fieldNames []string
-	if names, ok := fieldOpts["names"].([]string); ok {
-		fieldNames = names
-	} else if names, ok := fieldOpts["names"].([]any); ok {
-		for _, n := range names {
-			if s, ok := n.(string); ok {
-				fieldNames = append(fieldNames, s)
-			}
-		}
-	}
+	// Held as []any, not []string, because the header row is held that way
+	// too: the canonical keeps `ctx.u.fields` as the RAW cells and names a
+	// column only where it builds one. The two sources of a field list have
+	// to be interchangeable, so this one widens rather than that one
+	// narrowing.
+	//
+	// Every element is kept, whatever its type, because TS names a column
+	// with `obj[fields[fI]] = ...`, which CONVERTS the element rather than
+	// requiring a string: `names: [1, 2]` names columns "1" and "2".
+	// Keeping only the strings shortened the list instead, which renamed
+	// every column after the dropped one and changed the count
+	// `field.exact` compares a record against.
+	//
+	// An EXPLICITLY EMPTY list stays non-nil. TS reads the field list as
+	// `ctx.u.fields || options.field.names`, and every array is truthy
+	// there, `[]` included, so `names: []` IS a field list: with
+	// `field.exact` on, a one-cell record is then one field too many and
+	// the parse fails with csv_extra_field. An append loop seeded from a
+	// nil slice leaves nil for an empty input, which the `fields != nil`
+	// guard below reads as "no field list at all" and the check is
+	// skipped. asSlice allocates before it appends, so the empty case
+	// keeps a non-nil zero-length slice.
+	fieldNames, _ := asSlice(fieldOpts["names"])
 
 	refs := map[jsonic.FuncRef]any{
 
@@ -251,8 +267,8 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 
 		"@record-bc": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			recordI, _ := ctx.Meta["recordI"].(int)
-			var fields []string
-			if fs, ok := ctx.Meta["fields"].([]string); ok {
+			var fields []any
+			if fs, ok := ctx.Meta["fields"].([]any); ok {
 				fields = fs
 			}
 			if fields == nil {
@@ -260,14 +276,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			}
 
 			if recordI == 0 && header {
+				// The header row is kept exactly as it was parsed, which
+				// is what TS keeps: `ctx.u.fields = r.child.node`. A cell
+				// is turned into a column NAME only where an object record
+				// is built, so nothing is converted here. An empty array
+				// is still a field list, as it is in TS where `[]` is
+				// truthy, so a nil slice here would wrongly fall back to
+				// field.names on the next row.
 				if childArr, ok := r.Child.Node.([]any); ok {
-					names := make([]string, len(childArr))
-					for i, v := range childArr {
-						names[i], _ = v.(string)
-					}
-					ctx.Meta["fields"] = names
+					ctx.Meta["fields"] = childArr
 				} else {
-					ctx.Meta["fields"] = []string{}
+					ctx.Meta["fields"] = []any{}
 				}
 			} else {
 				record, _ := r.Child.Node.([]any)
@@ -320,11 +339,44 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 
 					if fields != nil {
 						for fI := 0; fI < len(fields); fI++ {
+							// This is the ONE place a header cell becomes
+							// a column name, and the only place TS
+							// converts one: `obj[fields[fI]] = ...` puts
+							// the raw cell through the language's
+							// ToPropertyKey, which for anything but a
+							// symbol is ToString. In non-strict mode a
+							// field body is parsed, so the cell can be a
+							// float64, a bool, a nil or an array rather
+							// than a string.
+							//
+							// An OBJECT has no ToString at all, and the
+							// canonical runtime throws a TypeError here
+							// rather than naming the column. This port
+							// cannot raise one, so it refuses the document
+							// with the engine's inherited `unexpected`
+							// code instead of inventing a name;
+							// DIVERGENCE.md records that choice. Refusing
+							// at the header row instead was too early: it
+							// also refused an `object: false` parse and a
+							// header-only document, neither of which ever
+							// asks for a name, and both of which the
+							// canonical returns a value for.
+							name, nameOk := jsKey(fields[fI])
+							if !nameOk {
+								if ctx.T0 != nil {
+									ctx.ParseErr = ctx.T0.Bad("unexpected", nil)
+								} else {
+									ctx.ParseErr = (&jsonic.Token{
+										Name: "#BD", Tin: jsonic.TinBD,
+									}).Bad("unexpected", nil)
+								}
+								return
+							}
 							var val any = emptyField
 							if fI < len(record) && !jsonic.IsUndefined(record[fI]) {
 								val = record[fI]
 							}
-							obj[fields[fI]] = val
+							obj[name] = val
 						}
 						i = len(fields)
 					}
@@ -628,12 +680,38 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 // returns make(cfg, opts) => matcher(lex).
 func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 	quote := toString(stringOpts["quote"])
+
+	// The canonical opens a quoted field with
+	// `quoteMap = { [options.string.quote]: true }` and then tests
+	// `quoteMap[src[sI]]`, and `src[sI]` is ONE UTF-16 code unit. So the
+	// canonical matcher can only ever fire for a quote that IS one code
+	// unit, and is inert for every other value of the option: the empty
+	// string, a multi-character quote such as `""`, and an astral
+	// character such as U+1F600, which JavaScript holds as a surrogate
+	// PAIR. `strings.HasPrefix` agreed with none of those. It matched a
+	// multi-character quote the canonical cannot match, matched an astral
+	// quote the same way, and -- worst -- returned true at every position
+	// for the EMPTY quote, because every string has the empty prefix, so
+	// the matcher consumed nothing, the lexer made no progress, and
+	// `string.quote: ""` HUNG the parse instead of returning.
+	//
+	// Measured against the canonical on `a,b\n"x y",z` and friends: the
+	// one-character quote `|` matches in both, while the two-character
+	// quote `""`, the two-character quote `ab`, the astral U+1F600 and
+	// the empty quote are inert in both once this guard is here.
+	quoteRune, quoteSize := utf8.DecodeRuneInString(quote)
+	singleCodeUnit := 0 < quoteSize && quoteSize == len(quote) && quoteRune <= 0xFFFF
+
 	return func(cfg *jsonic.LexConfig, opts *jsonic.Options) jsonic.LexMatcher {
 		return func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 			pnt := lex.Cursor()
 			src := lex.Src
 			sI := pnt.SI
 			srclen := len(src)
+
+			if !singleCodeUnit {
+				return nil
+			}
 
 			if sI >= srclen || !strings.HasPrefix(src[sI:], quote) {
 				return nil
@@ -957,4 +1035,280 @@ func toString(v any) string {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// jsKey renders a value as JavaScript renders it when it is used as an
+// object key: `obj[v] = ...` applies ToPropertyKey, which for anything
+// but a symbol is ToString. The vocabulary a parsed CSV field can hold is
+// spelled out, and so is the wider one an OPTION value can hold: a field
+// list is `ctx.u.fields` or `field.names`, and `field.empty` is dropped
+// into a syntactically empty cell, so `,a` under
+// `{field: {empty: 42}}` names a column with a value that never went
+// through the lexer.
+//
+// ok is false when JavaScript cannot make a primitive of the value at
+// all, which is a PARSED object: a jsonic object is allocated with a
+// null prototype, so it inherits neither toString nor Symbol.toPrimitive
+// and the canonical runtime throws
+// `TypeError: Cannot convert object to primitive value` instead of
+// naming the column. This port cannot raise a JavaScript TypeError, so
+// it refuses the document instead; see DIVERGENCE.md.
+//
+// An object supplied as an OPTION value is the OTHER case, and the
+// canonical answers it differently: the option merge rebuilds a plain
+// source object onto Object.prototype on the way into the bag, so String
+// names the column "[object Object]" there and nothing throws, even for
+// one the caller made with Object.create(null). This function CAN see
+// which is which, because the two arrive as different Go types: the
+// lexer builds *jsonic.OrderedMap, an option value stays the
+// map[string]any the caller wrote. An earlier version of this comment
+// said the provenance was invisible here and DIVERGENCE.md recorded the
+// refusal of the option route as unavoidable. Both were wrong.
+//
+// The last-resort `fmt.Sprintf("%v", v)` this used to end with is what
+// made that necessary: it put the engine's internal struct into a column
+// name (`{x:1}` became `&{[x] map[x:1] false}`) and an array into Go's
+// own bracket form (`[1,2]` became `[1 2]`), neither of which the
+// canonical runtime can produce for any input.
+func jsKey(val any) (key string, ok bool) {
+	switch v := val.(type) {
+	case string:
+		return v, true
+	case bool:
+		if v {
+			return "true", true
+		}
+		return "false", true
+	case nil:
+		return "null", true
+	case []any:
+		return jsArrayKey(v)
+	case *jsonic.OrderedMap, jsonic.OrderedMap:
+		// A PARSED object. See the divergence above: the canonical throws
+		// rather than naming the column, so this port refuses instead.
+		// Listed explicitly so the reflect fallbacks below cannot claim
+		// it: an OrderedMap is a struct, not a Go map, but saying so out
+		// loud is what keeps the two routes apart when either type moves.
+		return "", false
+	default:
+		if f, isNumber := jsNumber(val); isNumber {
+			return jsNumberToString(f), true
+		}
+		// A slice of any element type, not just []any. `field.empty` and
+		// `field.names` are unconstrained Go options, so a caller writes
+		// the array Go makes easiest: []string{"a", "b"}, []int{1, 2},
+		// [][]string{...}. The lexer only ever builds []any, so the shared
+		// fixtures reach this site with []any alone and a type assertion
+		// on that one shape passed them while refusing every native
+		// spelling. JavaScript has one array type, and
+		// Array.prototype.toString joins whatever is in it, so each of
+		// these is the same array to the canonical runtime.
+		if items, isSlice := asSlice(val); isSlice {
+			return jsArrayKey(items)
+		}
+		// A Go MAP is an option value, never a parsed cell: the lexer
+		// builds *jsonic.OrderedMap, refused above. The canonical's option
+		// merge rebuilds a plain source object onto Object.prototype on
+		// the way into the bag, so String gives it "[object Object]" and
+		// nothing throws. Provenance is therefore readable from the Go
+		// type, and this port answers the option route exactly as the
+		// canonical does.
+		if reflect.ValueOf(val).Kind() == reflect.Map {
+			return "[object Object]", true
+		}
+		return "", false
+	}
+}
+
+// asSlice widens any Go slice or array to the []any the name-building
+// code works in. It reports false for everything else, INCLUDING a
+// string, whose Kind is neither Slice nor Array, so a string never
+// becomes a one-element list.
+//
+// The returned slice is non-nil whenever ok is true, the empty input
+// included. That matters for `field.names`: TS treats `[]` as a field
+// list, because every array is truthy there, and a nil slice here would
+// be read as no list at all.
+//
+// It always COPIES, a []any input included, so that a field list read
+// out of the option bag at install time cannot be changed afterwards by
+// a caller who still holds the slice they passed. jsKey keeps its own
+// []any case ahead of this one, so the hot path of naming a column from
+// a parsed array does not pay for the copy.
+func asSlice(val any) ([]any, bool) {
+	if val == nil {
+		return nil, false
+	}
+	rv := reflect.ValueOf(val)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+	default:
+		return nil, false
+	}
+	items := make([]any, 0, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		items = append(items, rv.Index(i).Interface())
+	}
+	return items, true
+}
+
+// jsNumber widens Go's numeric spellings to the float64 the lexer always
+// produces. The lexer only ever makes a float64, but an OPTION value is
+// whatever the caller wrote: `field.empty: 42` is an int in a Go map
+// literal, an int64 or a json.Number when the options were decoded, and a
+// float32 when they came from a narrower field. JavaScript has one number
+// type, so every one of these is the same double to the canonical
+// runtime, which names the column "42" where this port used to refuse the
+// document outright.
+//
+// A value too large for a float64's mantissa loses the same digits the
+// canonical runtime loses, because a JavaScript number IS a double.
+func jsNumber(val any) (float64, bool) {
+	switch v := val.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint8:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
+}
+
+// jsArrayKey is Array.prototype.toString, which is join(',') with no
+// separator argument (ECMA-262 23.1.3.17 and 23.1.3.34): every element
+// is converted by the same rules, null and undefined become the empty
+// string, and a nested array joins recursively, so `[1,[2,3]]` flattens
+// to "1,2,3" and `[]` is "".
+//
+// Note that a null ELEMENT is "" while a null CELL is "null": the empty
+// string comes from join, not from ToString, so it applies only inside
+// an array.
+//
+// The recursion needs no depth bound and no seen-set. A parsed value is
+// a TREE: the engine folds each finished rule's value into its parent
+// and never stores a reference to an ancestor, so no element can reach
+// its own array and the walk always terminates. Its depth is the
+// document's bracket nesting, which the caller's stack has already
+// carried once while the engine built the value and carries again
+// whenever the value is marshalled.
+func jsArrayKey(items []any) (string, bool) {
+	var joined strings.Builder
+	for i, item := range items {
+		if 0 < i {
+			joined.WriteByte(',')
+		}
+		if item == nil || jsonic.IsUndefined(item) {
+			continue
+		}
+		part, ok := jsKey(item)
+		if !ok {
+			return "", false
+		}
+		joined.WriteString(part)
+	}
+	return joined.String(), true
+}
+
+// jsNumberToString is ECMAScript `Number::toString` with radix 10
+// (ECMA-262 6.1.6.1.20), which is what `String(n)` gives and therefore
+// what a numeric header cell is named in the canonical runtime.
+//
+// strconv.FormatFloat(v, 'f', -1, 64) is NOT a substitute. It has no
+// switch to exponent form, so 1e21 comes out as twenty-two digits where
+// JavaScript writes "1e+21", and 1e-7 as a string of zeros where
+// JavaScript writes "1e-7".
+//
+// The digits come from a FIXED-precision render rather than the shortest
+// one. Both round-trip, but they break an exact decimal midpoint
+// differently: the shortest form rounds away from zero, while the
+// specification takes the even digit, which is what a fixed-precision
+// render does. The same defect has been found in six Rust crates of this
+// fleet; ts/src/csv.ts needs no such code because the language does it.
+func jsNumberToString(f float64) string {
+	if math.IsNaN(f) {
+		return "NaN"
+	}
+	if math.IsInf(f, 1) {
+		return "Infinity"
+	}
+	if math.IsInf(f, -1) {
+		return "-Infinity"
+	}
+	// Covers -0, which JavaScript prints as "0".
+	if f == 0 {
+		return "0"
+	}
+
+	magnitude := math.Abs(f)
+
+	// The specification's `s` (the digits) and `n` (where the decimal
+	// point sits). Take the digit count from the shortest form, then take
+	// the digits themselves at that fixed precision.
+	shortest := strconv.FormatFloat(magnitude, 'e', -1, 64)
+	mantissa, _, _ := strings.Cut(shortest, "e")
+	k := len(strings.Replace(mantissa, ".", "", 1))
+
+	fixed := strconv.FormatFloat(magnitude, 'e', k-1, 64)
+	mantissa, exponentText, _ := strings.Cut(fixed, "e")
+	digits := strings.Replace(mantissa, ".", "", 1)
+	exponent, err := strconv.Atoi(exponentText)
+	if err != nil {
+		// FormatFloat with 'e' always emits a signed integer exponent.
+		return strconv.FormatFloat(f, 'g', -1, 64)
+	}
+	n := exponent + 1
+
+	var body string
+	switch {
+	case k <= n && n <= 21:
+		// 12 -> "12", 1e19 -> "10000000000000000000"
+		body = digits + strings.Repeat("0", n-k)
+	case 0 < n && n <= 21:
+		// 1.5 -> "1.5"
+		body = digits[:n] + "." + digits[n:]
+	case -6 < n && n <= 0:
+		// 1e-6 -> "0.000001"
+		body = "0." + strings.Repeat("0", -n) + digits
+	default:
+		// 1e21 -> "1e+21", 1e-7 -> "1e-7"
+		e := n - 1
+		head := digits
+		if k > 1 {
+			head = digits[:1] + "." + digits[1:]
+		}
+		sign := "+"
+		if e < 0 {
+			sign = "-"
+			e = -e
+		}
+		body = head + "e" + sign + strconv.Itoa(e)
+	}
+
+	if f < 0 {
+		return "-" + body
+	}
+	return body
 }
