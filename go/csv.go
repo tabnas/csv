@@ -216,10 +216,27 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 
 	// IGNORE set: drop #LN so row breaks are significant; in strict mode
 	// also drop #SP so whitespace inside fields is preserved.
+	//
+	// The override is written POSITION BY POSITION, not as the set to
+	// install. From parser/go v0.11.0 on (parser#151) the engine overlays a
+	// named token set onto the one already installed INDEX-WISE, as the
+	// canonical TypeScript deep merge has always done: index i of the
+	// override replaces index i of the installed set, an empty name clears
+	// that index, and an override shorter than the set keeps the tail it
+	// does not reach. Measured on that engine, the set this overlays is
+	// [#SP #LN #CM], in that order, so every position is named rather than
+	// left off. The empty string is Go's spelling of the `null` in the
+	// canonical `tokenSet: { IGNORE: [...] }` of ts/src/csv.ts.
+	//
+	// Strict clears positions 0 and 1 (#SP, #LN) and keeps #CM; non-strict
+	// clears position 1 (#LN) only, keeping #SP and #CM. Both spellings also
+	// hold under the engine go/go.mod declares (v0.9.0), which installs the
+	// named set outright instead of overlaying it: applyTokenSets skips an
+	// empty name there, so the same two slices install the same two sets.
 	if strict {
-		jsonicOptions.TokenSet = map[string][]string{"IGNORE": {"#CM"}}
+		jsonicOptions.TokenSet = map[string][]string{"IGNORE": {"", "", "#CM"}}
 	} else {
-		jsonicOptions.TokenSet = map[string][]string{"IGNORE": {"#SP", "#CM"}}
+		jsonicOptions.TokenSet = map[string][]string{"IGNORE": {"#SP", "", "#CM"}}
 	}
 
 	// jsonicOptions is applied AFTER Grammar() below so its TokenSet
