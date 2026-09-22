@@ -129,6 +129,20 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	stream := toStream(options["stream"])
 
 	// In strict mode, Jsonic field content is not parsed.
+	//
+	// The jsonic string matcher is LEFT ON here, exactly as ts/src/csv.ts
+	// leaves it on: the RFC 4180 matcher registered below runs first and
+	// takes every field that opens with the configured quote, and the jsonic
+	// matcher reads the quote characters that one does not own. So `'x y'`
+	// and `` `x y` `` are the strings `x y` in a strict document, as they
+	// are in the canonical, and a quote the RFC 4180 matcher cannot fire for
+	// at all — `string.quote` empty, or more than one UTF-16 code unit —
+	// falls through to the jsonic matcher rather than being read as text.
+	//
+	// This port used to switch it off (`String{Lex: false, Chars: ""}`), and
+	// that answered six inputs differently from the canonical; the shared
+	// rows at the end of ../test/spec/double-quote.tsv now hold all three
+	// runtimes to the canonical answer. Do not reinstate it.
 	if strict {
 		if !isFalse(stringOpts["csv"]) {
 			j.SetOptions(jsonic.Options{Lex: &jsonic.LexOptions{
@@ -180,16 +194,6 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		Line: &jsonic.LineOptions{
 			Single: boolPtr(record_empty),
 		},
-	}
-
-	if strict {
-		csvStringOpt := stringOpts["csv"]
-		if csvStringOpt == nil || isTrue(csvStringOpt) {
-			jsonicOptions.String = &jsonic.StringOptions{
-				Lex:   boolPtr(false),
-				Chars: "",
-			}
-		}
 	}
 
 	if recordSep != "" {

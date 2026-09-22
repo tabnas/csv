@@ -906,24 +906,18 @@ fn stream() {
     assert_eq!(events.len(), 5);
 }
 
-/// A quote the canonical matcher cannot fire for leaves the jsonic string
-/// matcher to read the quotes, because this port keeps that matcher ON in
-/// strict mode as TypeScript does. The two rows here are the half of the
-/// degenerate-quote table that `../test/spec/double-quote.tsv` cannot
-/// hold: Go switches the jsonic matcher off in strict mode, so it answers
-/// these two with the text as written. Measured against the canonical on
-/// 2026-09-22.
-#[test]
-fn a_degenerate_quote_leaves_the_jsonic_matcher_reading_the_quotes() {
-    assert_eq!(
-        must("a,b\n\"x y\",z", json!({"string": {"quote": ""}})),
-        json!([{"a":"x y","b":"z"}])
-    );
-    assert_eq!(
-        code_of("a,b\n\"\"x y\"\",z", json!({"string": {"quote": "\"\""}})),
-        "unexpected"
-    );
-}
+// A quote the RFC 4180 matcher cannot fire for leaves the jsonic string
+// matcher to read the quotes, because every runtime keeps that matcher ON
+// in strict mode: `string.quote: ""` reads `"x y"` as the string `x y`,
+// and `string.quote: "\"\""` fails the document. Those two, and the
+// plain `'x y'` and `` `x y` `` the jsonic matcher takes under the
+// default quote, are the rest of the degenerate-quote table.
+//
+// They now live in `test/spec/double-quote.tsv`, where all three runtimes
+// run them. They were a Rust-only test while the Go port switched the
+// jsonic matcher off in strict mode, which answered them with the text as
+// written; that is fixed, so the coverage moved to the shared fixture
+// rather than staying in one runtime.
 
 // ---------------------------------------------------------------------------
 // Typed options

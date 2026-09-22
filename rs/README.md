@@ -189,11 +189,6 @@ say what JavaScript says:
   descriptions of the CSV tokens for the railroad diagram tool. The Rust
   engine has no such table and no diagram tool reads it, so that
   registration has no counterpart.
-- **The jsonic string matcher stays on in strict mode**, as in
-  TypeScript: the RFC 4180 matcher runs first and takes every field that
-  opens with the configured quote, and the jsonic matcher reads the
-  other quote characters. The Go port switches the jsonic matcher off
-  there.
 - **Lone surrogates fold to U+FFFD**, and the regular expression dialect
   is the `regex` crate's. Both come from the engine, and both are
   recorded there.

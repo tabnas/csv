@@ -125,13 +125,15 @@ runs the three inputs Go pins in all three runtimes, and
 `tests/csv_export_test.rs` asserts the factory itself, because an inert
 matcher and an absent one look the same from the outside.
 
-The jsonic string matcher stays ON in strict mode, as in TypeScript. Go
-switches it off there (`String.Lex=false`); do not copy that, or `'x'`
-in a strict document stops being the string `x`. That is what the other
-half of the degenerate-quote table turns on, and why it is a test here
-rather than a shared row: with the CSV matcher out, `string.quote: ""`
-reads `"x y"` as the string `x y` and `string.quote: '""'` fails the
-document, as the canonical does and Go does not.
+The jsonic string matcher stays ON in strict mode, as it does in
+TypeScript and — since the repair recorded below — in Go. Do not switch
+it off (`String.Lex=false` was the Go spelling), or `'x'` in a strict
+document stops being the string `x`. That is what the rest of the
+degenerate-quote table turns on: with the CSV matcher inert,
+`string.quote: ""` reads `"x y"` as the string `x y` and
+`string.quote: '""'` fails the document. Those rows are in
+`../test/spec/double-quote.tsv`, so all three runtimes assert them; they
+were a Rust-only test while Go answered them with the text as written.
 
 ## The conformance corpora
 
