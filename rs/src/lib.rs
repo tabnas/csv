@@ -1134,12 +1134,19 @@ fn options_document(
 
     // IGNORE set: `#LN` leaves it so row breaks are significant; in strict
     // mode `#SP` leaves it too so whitespace inside a field survives. This
-    // engine REPLACES a token set outright, as the Go engine does, so the
-    // survivors are listed.
+    // engine merges a token set INDEX-WISE onto the one already installed,
+    // as the canonical TypeScript deep merge does: a `null` drops that
+    // position and a shorter array keeps the tail of the set it overlays.
+    // So the override is spelled position for position over the jsonic
+    // default `[#SP, #LN, #CM]`, exactly as `ts/src/csv.ts` spells it, and
+    // the trailing position is named rather than left off: an override that
+    // stops short of the installed length would keep whatever the tail
+    // holds, and this one has to answer the same on a derived instance,
+    // where the set it overlays is already the reduced one.
     let ignore = if strict {
-        json!(["#CM"])
+        json!([null, null, "#CM"])
     } else {
-        json!(["#SP", "#CM"])
+        json!(["#SP", null, "#CM"])
     };
 
     let mut line = json!({ "single": settings.record_empty });
