@@ -996,12 +996,29 @@ fn register_refs(parser: &mut Tabnas, settings: &Settings, quote: &str) {
 /// `unterminated_string`. Loop exhaustion is what detects the open quote,
 /// so an odd number of quotes (`"""`, `"""""`) is caught rather than read
 /// as a terminated string.
+///
+/// A quote that is not exactly one UTF-16 code unit leaves the matcher
+/// inert, and the factory answers `None` rather than installing one. The
+/// canonical opens a quoted field with
+/// `quoteMap = { [options.string.quote]: true }` and tests
+/// `quoteMap[src[sI]]`, where `src[sI]` is ONE UTF-16 code unit, so it
+/// can only ever fire for a quote that is one code unit: the empty
+/// string, a multi-character quote such as `ab`, and an astral character
+/// such as U+1F600, which JavaScript holds as a surrogate PAIR, are all
+/// inert there. Go carries the same guard, with the same reasoning.
 pub fn csv_string_matcher(
     quote: impl Into<String>,
 ) -> impl Fn(&Options) -> Option<ImperativeLexMatcher> + Send + Sync + 'static {
     let quote: String = quote.into();
+    let single_code_unit = {
+        let mut characters = quote.chars();
+        match (characters.next(), characters.next()) {
+            (Some(character), None) => character.len_utf16() == 1,
+            _ => false,
+        }
+    };
     move |options: &Options| {
-        if quote.is_empty() {
+        if !single_code_unit {
             return None;
         }
         let quote = quote.clone();

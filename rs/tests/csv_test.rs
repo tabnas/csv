@@ -906,6 +906,25 @@ fn stream() {
     assert_eq!(events.len(), 5);
 }
 
+/// A quote the canonical matcher cannot fire for leaves the jsonic string
+/// matcher to read the quotes, because this port keeps that matcher ON in
+/// strict mode as TypeScript does. The two rows here are the half of the
+/// degenerate-quote table that `../test/spec/double-quote.tsv` cannot
+/// hold: Go switches the jsonic matcher off in strict mode, so it answers
+/// these two with the text as written. Measured against the canonical on
+/// 2026-09-22.
+#[test]
+fn a_degenerate_quote_leaves_the_jsonic_matcher_reading_the_quotes() {
+    assert_eq!(
+        must("a,b\n\"x y\",z", json!({"string": {"quote": ""}})),
+        json!([{"a":"x y","b":"z"}])
+    );
+    assert_eq!(
+        code_of("a,b\n\"\"x y\"\",z", json!({"string": {"quote": "\"\""}})),
+        "unexpected"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Typed options
 // ---------------------------------------------------------------------------
