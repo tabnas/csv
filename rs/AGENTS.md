@@ -115,9 +115,23 @@ character is `unprintable`; an open quote at end of source is
 `unterminated_string`, detected by loop exhaustion so an odd run of
 quotes cannot pass as terminated.
 
+The factory answers `None`, installing no matcher at all, for a quote
+that is not exactly one UTF-16 code unit. The canonical tests
+`quoteMap[src[sI]]` against ONE code unit, so the empty string, a
+multi-character quote such as `ab` and an astral character such as
+U+1F600 (a surrogate PAIR in JavaScript) are all inert there, and
+`starts_with` agreed with none of them. `../test/spec/double-quote.tsv`
+runs the three inputs Go pins in all three runtimes, and
+`tests/csv_export_test.rs` asserts the factory itself, because an inert
+matcher and an absent one look the same from the outside.
+
 The jsonic string matcher stays ON in strict mode, as in TypeScript. Go
 switches it off there (`String.Lex=false`); do not copy that, or `'x'`
-in a strict document stops being the string `x`.
+in a strict document stops being the string `x`. That is what the other
+half of the degenerate-quote table turns on, and why it is a test here
+rather than a shared row: with the CSV matcher out, `string.quote: ""`
+reads `"x y"` as the string `x y` and `string.quote: '""'` fails the
+document, as the canonical does and Go does not.
 
 ## The conformance corpora
 
