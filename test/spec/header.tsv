@@ -19,3 +19,7 @@ input	expected	opts
 # conversion site, so this is the same path the row above takes.
 a,\nx,y	[{"a":"x","":"y"}]
 ,\nx,y	[{"":"y"}]
+# An empty field.names names no column, so every cell takes a no-name key;
+# a shorter list names the columns it has and no more.
+x,y	[{"field~0":"x","field~1":"y"}]	{"header":false,"field":{"names":[]}}
+x,y	[{"p":"x","field~1":"y"}]	{"header":false,"field":{"names":["p"]}}

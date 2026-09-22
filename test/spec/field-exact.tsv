@@ -18,3 +18,8 @@ a,b\n1,2	[["1","2"]]	{"object":false,"field":{"exact":true}}
 # correctly inert. This is divergence (5) against go/encoding/csv, whose
 # FieldsPerRecord needs no header — pinned here so it cannot change silently.
 a,b,c\nd,e	[["a","b","c"],["d","e"]]	{"header":false,"object":false,"field":{"exact":true}}
+# An EXPLICITLY EMPTY field.names is still a field list, so the count it
+# declares is zero and one cell is one field too many. An empty document has
+# no record to compare, so it still parses.
+x	ERROR:csv_extra_field	{"header":false,"field":{"names":[],"exact":true}}
+	[]	{"header":false,"field":{"names":[],"exact":true}}
