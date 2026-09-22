@@ -52,8 +52,19 @@ bottom, in this order, and the order is load-bearing:
    mode, `#CA` rebound to `field.separation`), the IGNORE token set
    (`#LN` dropped; `#SP` too in strict mode), the `number` / `value` /
    `comment` lexer switches, `line.single` / `line.chars`, and the
-   `lex.match.stringcsv` entry. This engine REPLACES a token set
-   outright, as Go's does, so the survivors are listed.
+   `lex.match.stringcsv` entry. This engine merges a token set
+   INDEX-WISE onto the one already installed, as the canonical
+   TypeScript deep merge does and unlike Go's, which replaces outright:
+   a `null` drops that position and a shorter array keeps the tail of
+   the set it overlays. So the IGNORE override is spelled position for
+   position over the jsonic default `[#SP, #LN, #CM]`, as
+   `ts/src/csv.ts` spells it, and it names its trailing position rather
+   than stopping short, because a derived instance overlays it onto the
+   already reduced set. `tests/csv_test.rs`
+   `the_ignore_set_keeps_only_the_tokens_the_mode_ignores` pins the
+   resolved set in both modes and under `derive`; a set left merely
+   shorter still parses the first record, which is why the test reads
+   the set rather than one parse.
 3. **The embedded grammar** is parsed by `tabnas_jsonic::parse` (the
    shared default instance, so a rebuild costs no second jsonic), every
    whole number is turned into an integer (jsonic yields `f64`; the
