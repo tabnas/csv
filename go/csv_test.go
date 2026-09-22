@@ -647,6 +647,22 @@ func parseFixture(src string, pluginOpts map[string]any, jsonicOpts map[string]a
 	j := jsonic.Make()
 
 	// Apply jsonicOpt: value.def
+	//
+	// A null entry in the manifest is a DELETE MARKER, as it is in the
+	// canonical runner (`j.options(entry.jsonicOpt)` in ts/test/csv.test.ts),
+	// and Go spells that null as a nil *ValueDef. Deleting the key from the
+	// map instead only answered the same while the engine installed
+	// `value.def` wholesale; from parser/go v0.11.0 (parser#151) a map of
+	// definitions merges entry by entry, so a key that is simply absent keeps
+	// the engine's own default and the deletion stopped happening — which is
+	// what made the papa "Dynamic typing doesn't convert other types" fixture
+	// read `null` back as nil instead of "null".
+	//
+	// The three engine defaults are still seeded, and they are load-bearing
+	// the other way: the engine this module's go.mod requires REPLACES the
+	// map, so an overlay naming only TRUE/FALSE would take lowercase
+	// true/false out of "Dynamic typing converts boolean literals". Naming
+	// them and marking a deletion answers the same under both engines.
 	if valOpt, ok := jsonicOpts["value"].(map[string]any); ok {
 		if defMap, ok := valOpt["def"].(map[string]any); ok {
 			vopts := jsonic.Options{Value: &jsonic.ValueOptions{
@@ -658,7 +674,7 @@ func parseFixture(src string, pluginOpts map[string]any, jsonicOpts map[string]a
 			}}
 			for k, v := range defMap {
 				if v == nil {
-					delete(vopts.Value.Def, k)
+					vopts.Value.Def[k] = nil
 				} else if vm, ok := v.(map[string]any); ok {
 					vopts.Value.Def[k] = &jsonic.ValueDef{Val: vm["val"]}
 				}
