@@ -309,13 +309,23 @@ still refuses a non-string element, and `DIVERGENCE.md` carries why.
   merging onto them. For most keys that is invisible, because `csv.go`
   re-supplies the same fallback itself (`field.empty` is `""`,
   `field.names` is absent, `field.exact` is off). `string.quote` is the
-  one with a default `csv.go` does not re-supply, measured on 2026-09-21
-  on `parse("a,b\n\"x y\",z", {string: {csv: true}})`:
+  one with a default `csv.go` does not re-supply: it is lost, the RFC 4180
+  matcher is built for the empty quote and is inert, and the jsonic string
+  matcher reads the field instead. Measured on 2026-09-22 on
+  `parse(src, {string: {csv: true}})`:
 
-  | how `string` is spelled | TS (canonical) | Go |
-  |---|---|---|
-  | `map[string]any{"csv": true}` | `{"a":"x y","b":"z"}` | the same |
-  | `Field{"csv": true}` | `{"a":"x y","b":"z"}` | `{"a":"\"x y\"","b":"z"}` |
+  | src | how `string` is spelled | TS (canonical) | Go |
+  |---|---|---|---|
+  | `a\n"x""y"` | `map[string]any{"csv": true}` | `{"a":"x\"y"}` | the same |
+  | `a\n"x""y"` | `Field{"csv": true}` | `{"a":"x\"y"}` | `ERROR:unexpected` |
+  | `a\n"x\ty"` | `Field{"csv": true}` | `{"a":"x\\ty"}` | `{"a":"x\ty"}` |
+
+  The symptom is the ESCAPING convention, not the quoting: `a,b\n"x y",z`
+  reads the same in both spellings, because the jsonic matcher strips a
+  plain `"` exactly as the RFC 4180 one would. It used to differ there too,
+  while this port switched the jsonic string matcher off in strict mode;
+  that is repaired, and the doubled quote and the backslash escape are what
+  is left.
 
   Do not paper over it by defaulting `quote` inside `csv.go`. That hides
   a merge inconsistency every other plugin with nested options will hit,

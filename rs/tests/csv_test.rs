@@ -211,6 +211,36 @@ fn installing_twice_does_not_double_the_grammar() {
     );
 }
 
+/// The IGNORE token set is what makes a row break significant: `#LN` has to
+/// leave it, and `#SP` too in strict mode, or a document collapses into one
+/// record. The engine merges a token set INDEX-WISE onto the one already
+/// installed, so the override is spelled position for position over the
+/// jsonic default and names its trailing position rather than stopping
+/// short. Both halves are asserted here because a set that is merely
+/// shorter than the installed one still parses the first record.
+#[test]
+fn the_ignore_set_keeps_only_the_tokens_the_mode_ignores() {
+    let mut strict = parser_for(json!({}));
+    let comment = strict.token("#CM");
+    assert_eq!(strict.token_set("IGNORE"), Some(vec![comment]));
+
+    let mut relaxed = parser_for(json!({"strict": false}));
+    let space = relaxed.token("#SP");
+    assert_eq!(
+        relaxed.token_set("IGNORE"),
+        Some(vec![space, relaxed.token("#CM")])
+    );
+
+    // A derived instance overlays the override onto the REDUCED set it
+    // inherits, so the same spelling has to answer the same there.
+    let child = strict.derive(|_options| {}).expect("derives");
+    assert_eq!(child.token_set("IGNORE"), Some(vec![comment]));
+    assert_eq!(
+        to_json(&child.parse("a\nb\nc").expect("parses")),
+        json!([{"a":"b"},{"a":"c"}])
+    );
+}
+
 #[test]
 fn a_derived_instance_rebuilds_the_grammar() {
     let parser = parser_for(json!({"object": false}));
@@ -875,6 +905,19 @@ fn stream() {
     );
     assert_eq!(events.len(), 5);
 }
+
+// A quote the RFC 4180 matcher cannot fire for leaves the jsonic string
+// matcher to read the quotes, because every runtime keeps that matcher ON
+// in strict mode: `string.quote: ""` reads `"x y"` as the string `x y`,
+// and `string.quote: "\"\""` fails the document. Those two, and the
+// plain `'x y'` and `` `x y` `` the jsonic matcher takes under the
+// default quote, are the rest of the degenerate-quote table.
+//
+// They now live in `test/spec/double-quote.tsv`, where all three runtimes
+// run them. They were a Rust-only test while the Go port switched the
+// jsonic matcher off in strict mode, which answered them with the text as
+// written; that is fixed, so the coverage moved to the shared fixture
+// rather than staying in one runtime.
 
 // ---------------------------------------------------------------------------
 // Typed options

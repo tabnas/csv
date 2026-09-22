@@ -100,6 +100,14 @@ So `"a""b"` lexes to the value `a"b`, and a multi-line quoted field is
 one record's worth of one field. The quote character can be changed via
 `string.quote`.
 
+This is a different escaping convention from jsonic's backslash escapes,
+which is exactly why strict mode swaps in the dedicated lexer. It does
+not swap jsonic's own string lexer OUT: the CSV lexer runs first and
+takes every field opening with `string.quote`, and jsonic's reads the
+quote characters it does not own, so `'x y'` is still the string `x y`
+in a strict document. In non-strict mode there is no CSV lexer unless you
+force it with `string.csv: true`, and jsonic's handles every quote.
+
 ## Object output
 
 When `object: true` (the default), each record is a plain

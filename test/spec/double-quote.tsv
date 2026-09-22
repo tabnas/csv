@@ -19,3 +19,10 @@ a\n"b""c	ERROR:unterminated_string
 a\n""	[{"a":""}]
 a\n""""	[{"a":"\""}]
 a\n""""""	[{"a":"\"\""}]
+a,b\n|x y|,z	[{"a":"x y","b":"z"}]	{"string":{"quote":"|"}}
+a,b\nabx yab,z	[{"a":"abx yab","b":"z"}]	{"string":{"quote":"ab"}}
+a,b\n😀x y😀,z	[{"a":"😀x y😀","b":"z"}]	{"string":{"quote":"😀"}}
+a,b\n'x y',z	[{"a":"x y","b":"z"}]
+a,b\n`x y`,z	[{"a":"x y","b":"z"}]
+a,b\n"x y",z	[{"a":"x y","b":"z"}]	{"string":{"quote":""}}
+a,b\n""x y"",z	ERROR:unexpected	{"string":{"quote":"\"\""}}

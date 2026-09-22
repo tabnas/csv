@@ -57,3 +57,28 @@ fn an_empty_quote_disables_the_matcher() {
     let value = parser.parse(r#""a\"b""#).expect("a backslash escape");
     assert_eq!(value, tabnas::Value::String("a\"b".to_string()));
 }
+
+/// A quote of more than one UTF-16 code unit leaves the matcher inert,
+/// as it is in the canonical: `quoteMap[src[sI]]` compares ONE code
+/// unit, so a multi-character quote and an astral character (a surrogate
+/// PAIR in JavaScript) can never open a field there. Measured against
+/// the canonical on the same three inputs, which
+/// `../test/spec/double-quote.tsv` now runs in all three runtimes; the
+/// factory is asserted here because an inert matcher is the same shape
+/// as an absent one from the outside.
+#[test]
+fn a_degenerate_quote_leaves_the_matcher_out() {
+    let options = tabnas::Options::default();
+    for quote in ["", "ab", "\"\"", "\u{1F600}"] {
+        assert!(
+            tabnas_csv::csv_string_matcher(quote)(&options).is_none(),
+            "quote {quote:?} should install no matcher"
+        );
+    }
+    for quote in ["\"", "|", "\u{20AC}"] {
+        assert!(
+            tabnas_csv::csv_string_matcher(quote)(&options).is_some(),
+            "quote {quote:?} is one code unit and should install a matcher"
+        );
+    }
+}

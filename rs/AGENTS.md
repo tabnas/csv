@@ -52,8 +52,19 @@ bottom, in this order, and the order is load-bearing:
    mode, `#CA` rebound to `field.separation`), the IGNORE token set
    (`#LN` dropped; `#SP` too in strict mode), the `number` / `value` /
    `comment` lexer switches, `line.single` / `line.chars`, and the
-   `lex.match.stringcsv` entry. This engine REPLACES a token set
-   outright, as Go's does, so the survivors are listed.
+   `lex.match.stringcsv` entry. This engine merges a token set
+   INDEX-WISE onto the one already installed, as the canonical
+   TypeScript deep merge does and unlike Go's, which replaces outright:
+   a `null` drops that position and a shorter array keeps the tail of
+   the set it overlays. So the IGNORE override is spelled position for
+   position over the jsonic default `[#SP, #LN, #CM]`, as
+   `ts/src/csv.ts` spells it, and it names its trailing position rather
+   than stopping short, because a derived instance overlays it onto the
+   already reduced set. `tests/csv_test.rs`
+   `the_ignore_set_keeps_only_the_tokens_the_mode_ignores` pins the
+   resolved set in both modes and under `derive`; a set left merely
+   shorter still parses the first record, which is why the test reads
+   the set rather than one parse.
 3. **The embedded grammar** is parsed by `tabnas_jsonic::parse` (the
    shared default instance, so a rebuild costs no second jsonic), every
    whole number is turned into an integer (jsonic yields `f64`; the
@@ -104,9 +115,25 @@ character is `unprintable`; an open quote at end of source is
 `unterminated_string`, detected by loop exhaustion so an odd run of
 quotes cannot pass as terminated.
 
-The jsonic string matcher stays ON in strict mode, as in TypeScript. Go
-switches it off there (`String.Lex=false`); do not copy that, or `'x'`
-in a strict document stops being the string `x`.
+The factory answers `None`, installing no matcher at all, for a quote
+that is not exactly one UTF-16 code unit. The canonical tests
+`quoteMap[src[sI]]` against ONE code unit, so the empty string, a
+multi-character quote such as `ab` and an astral character such as
+U+1F600 (a surrogate PAIR in JavaScript) are all inert there, and
+`starts_with` agreed with none of them. `../test/spec/double-quote.tsv`
+runs the three inputs Go pins in all three runtimes, and
+`tests/csv_export_test.rs` asserts the factory itself, because an inert
+matcher and an absent one look the same from the outside.
+
+The jsonic string matcher stays ON in strict mode, as it does in
+TypeScript and — since the repair recorded below — in Go. Do not switch
+it off (`String.Lex=false` was the Go spelling), or `'x'` in a strict
+document stops being the string `x`. That is what the rest of the
+degenerate-quote table turns on: with the CSV matcher inert,
+`string.quote: ""` reads `"x y"` as the string `x y` and
+`string.quote: '""'` fails the document. Those rows are in
+`../test/spec/double-quote.tsv`, so all three runtimes assert them; they
+were a Rust-only test while Go answered them with the text as written.
 
 ## The conformance corpora
 
