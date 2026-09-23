@@ -658,11 +658,13 @@ func parseFixture(src string, pluginOpts map[string]any, jsonicOpts map[string]a
 	// what made the papa "Dynamic typing doesn't convert other types" fixture
 	// read `null` back as nil instead of "null".
 	//
-	// The three engine defaults are still seeded, and they are load-bearing
-	// the other way: the engine this module's go.mod requires REPLACES the
-	// map, so an overlay naming only TRUE/FALSE would take lowercase
-	// true/false out of "Dynamic typing converts boolean literals". Naming
-	// them and marking a deletion answers the same under both engines.
+	// The three engine defaults are still seeded. go/go.mod now requires
+	// parser/go v0.12.0, which merges the map, so the seeding changes
+	// nothing there; it is load-bearing only under an engine before v0.11.0,
+	// which REPLACES the map, so an overlay naming only TRUE/FALSE would
+	// take lowercase true/false out of "Dynamic typing converts boolean
+	// literals". Naming them and marking a deletion answers the same under
+	// both engines.
 	if valOpt, ok := jsonicOpts["value"].(map[string]any); ok {
 		if defMap, ok := valOpt["def"].(map[string]any); ok {
 			vopts := jsonic.Options{Value: &jsonic.ValueOptions{
@@ -698,7 +700,7 @@ func parseFixture(src string, pluginOpts map[string]any, jsonicOpts map[string]a
 					if end, ok := cm["end"].(string); ok {
 						def.End = end
 					} else {
-						def.Line = true
+						def.Line = jsonic.Bool(true)
 					}
 					copts.Comment.Def[name] = def
 				}

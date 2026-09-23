@@ -233,10 +233,12 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	// canonical `tokenSet: { IGNORE: [...] }` of ts/src/csv.ts.
 	//
 	// Strict clears positions 0 and 1 (#SP, #LN) and keeps #CM; non-strict
-	// clears position 1 (#LN) only, keeping #SP and #CM. Both spellings also
-	// hold under the engine go/go.mod declares (v0.9.0), which installs the
-	// named set outright instead of overlaying it: applyTokenSets skips an
-	// empty name there, so the same two slices install the same two sets.
+	// clears position 1 (#LN) only, keeping #SP and #CM. go/go.mod requires
+	// parser/go v0.12.0, so this overlay is the one a published build
+	// resolves. Both spellings also hold under an engine before v0.11.0,
+	// which installs the named set outright instead of overlaying it:
+	// applyTokenSets skips an empty name there, so the same two slices
+	// install the same two sets.
 	if strict {
 		jsonicOptions.TokenSet = map[string][]string{"IGNORE": {"", "", "#CM"}}
 	} else {
