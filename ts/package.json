@@ -1,6 +1,6 @@
 {
   "name": "@tabnas/csv",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "This plugin allows the [Jsonic](https://github.com/tabnas/jsonic) JSON parser to support csv syntax.",
   "main": "dist/csv.js",
   "type": "commonjs",
@@ -30,7 +30,7 @@
     "embed": "node embed-grammar.js",
     "watch": "tsc --build src test -w",
     "build": "npm run embed && npm run compile",
-    "compile": "tsc --build src test",
+    "compile": "tsc --build src && tsc --build test",
     "clean": "rm -rf node_modules dist dist-test yarn.lock package-lock.json",
     "reset": "npm run clean && npm i && npm run build && npm test",
     "repo-tag": "REPO_VERSION=`node -e \"console.log(require('./package').version)\"` && echo TAG: ts/v$REPO_VERSION && git commit -a -m v$REPO_VERSION && git push && git tag ts/v$REPO_VERSION && git push origin ts/v$REPO_VERSION;",
@@ -53,8 +53,8 @@
     "@tabnas/parser": "*",
     "@tabnas/railroad": "*",
     "@tabnas/support": "*",
-    "@types/node": "^25.6.0",
-    "typescript": "^6.0.3"
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "@tabnas/jsonic": ">=0",
