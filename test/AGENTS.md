@@ -81,7 +81,7 @@ revision. `scripts/fetch-csv-suites.sh` fetches them:
   documents (the corpus has no must-fail half). Verified after fetch against
   a pinned document count and a pinned SHA-256 content digest.
 - `suites/go-encoding-csv/` — `golang/go` `src/encoding/csv/reader_test.go`
-  @ tag `go1.24.0`, SHA-256 pinned, converted to `cases.json` by
+  @ tag `go1.27.1`, SHA-256 pinned, converted to `cases.json` by
   `scripts/extract-go-csv-cases.mjs`: 43 valid + 12 must-fail, 13 excluded.
 
 Run by `ts/test/conformance.test.ts`, `go/conformance_test.go` and

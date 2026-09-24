@@ -112,7 +112,7 @@ subtleties:
    With `record.empty: true`, dropped comment lines do not become empty
    records (only genuine blank lines do).
 2. A `#` *inside* a field is treated as text until preceded by
-   whitespace. So `1,#x` keeps `#x` (the lexer sees `#` as the start of
+   whitespace. So `1,#x` keeps `#x` (the lexer reads `#` as the start of
    a value token), while `1, #x` strips `#x`.
 
 `trim: true` removes leading and trailing whitespace from each field's
@@ -175,7 +175,7 @@ error codes, hint templates).
 
 The `list`, `elem`, and `val` rules are configured in code rather than
 in the grammar file because *non-strict* mode must preserve jsonic's
-default alternatives for those rules in order to support embedded JSON.
+default alternatives for those rules to support embedded JSON.
 Putting them in code keeps the strict and non-strict variants on the
 same path.
 

@@ -42,7 +42,7 @@ sweep, an install or a fetch, a release, a wait on CI, a benchmark, a
 script or loop you write, and anything sent to the background.
 
 - **Minimal is enough.** One line with the step and a count, such as
-  `conformance: 412/1500 (27%)`, meets it. When no total is known, print
+  `conformance: 412 of 1500 (27%)`, meets it. When no total is known, print
   what is known (the step, the current item, the elapsed time) and say the
   percentage is unknown rather than inventing one.
 - **Build it into what you write.** A script or loop prints a line per
@@ -228,7 +228,7 @@ runtime, by `ts/test/conformance.test.ts`, `go/conformance_test.go` and
 | Corpus | Pin | Result |
 |---|---|---|
 | [max-mapper/csv-spectrum](https://github.com/max-mapper/csv-spectrum) | `d30e80f` (v2.0.0) | **11/12** by value; 1 upstream defect, pinned |
-| [golang/go `encoding/csv`](https://github.com/golang/go/blob/master/src/encoding/csv/reader_test.go) `readTests` | `3901409` | **39/55** exact; **16** documented divergences; 13 excluded |
+| [golang/go `encoding/csv`](https://github.com/golang/go/blob/master/src/encoding/csv/reader_test.go) `readTests` | `862c888` (go1.27.1) | **39/55** exact; **16** documented divergences; 13 excluded |
 
 The corpora are **not** vendored — `scripts/fetch-csv-suites.sh` fetches them
 at the pinned commits, and both runtimes arrange to run it themselves so a bare
@@ -825,20 +825,20 @@ examples correct.
 
 ## CI
 
-`.github/workflows/build.yml` has two jobs, neither publishing to npm:
+`.github/workflows/ci.yml` is a caller: it delegates to the org-shared
+`tabnas/.github/.github/workflows/polyglot-ci.yml@main` and passes
+`deps: "parser support debug json jsonic"`, the siblings that workflow
+git-clones and builds this repository against. The operating systems,
+the Node and Go versions and the steps live in that shared workflow,
+and are not restated here. It publishes nothing;
+`.github/workflows/release.yml` handles releases.
 
-- **build** (Ubuntu/Windows/macOS, Node 24): sets
-  `git config --global core.autocrlf false` (CRLF corrupts the `.csv`
-  fixtures, which are marked `binary` in `.gitattributes`), git-clones the
-  tabnas closure (`parser debug json abnf railroad jsonic`) as siblings,
-  `npm i && npm run build` each in topo order, then `npm test` here.
-- **build-go** (Ubuntu/macOS, Go 1.24): clones the same siblings, mirrors
-  `admin/scripts/link.sh` by creating `vendor/` symlinks for any
-  `../vendor/` replaces and a `go work` over every non-vendor-replaced
-  module, then `go build`/`go test -v` here.
+It runs `npm test` in `ts/` and the Go tests in `go/`. The `.csv` and
+`.json` fixtures under `test/fixtures/` are marked `binary` in
+`.gitattributes`, because some tests depend on their line endings.
 
-The Rust gate is staged in `ci/workflows/rust.yml` (see `ci/README.md`):
-it clones `parser`, `json`, `jsonic` and `support` beside the checkout and
+The Rust gate, `.github/workflows/rust.yml` (see `ci/README.md`),
+clones `parser`, `json`, `jsonic` and `support` beside the checkout and
 runs `ci/rust/run.sh`.
 
 ## Agent tooling

@@ -11,7 +11,7 @@ A [Jsonic](https://github.com/tabnas/jsonic) / [Tabnas](https://github.com/tabna
 grammar plugin that parses CSV text into arrays of objects (or arrays
 of arrays), with headers, RFC 4180 quoting, custom field/record
 separators, streaming, and a strict / non-strict mode. Available for
-TypeScript, Go and Rust.
+TypeScript, Go, and Rust.
 
 Docs, guides, the error reference and the playground: **[tabnas.dev](https://tabnas.dev)**.
 

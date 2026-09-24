@@ -12,7 +12,7 @@ as they are parsed, and a non-strict mode lets a field body hold embedded
 jsonic (`[1,2]`, `{x:1}`). The plugin is not standalone: it layers on the
 relaxed-JSON grammar of
 [`tabnas-jsonic`](https://github.com/tabnas/jsonic), and reuses the
-engine's lexer, comment handling and lifecycle hooks.
+engine's lexer, comment handling, and lifecycle hooks.
 
 This is the Rust port of the canonical TypeScript implementation in
 [`../ts`](../ts); the TypeScript version is authoritative and this crate
@@ -195,7 +195,7 @@ say what JavaScript says:
 
 ## Build and test
 
-The engine, the jsonic base, the JSON core it needs and the fixture
+The engine, the jsonic base, the JSON core it needs, and the fixture
 runner are path dependencies on sibling checkouts, so there is nothing
 to fetch for the build:
 
@@ -204,7 +204,7 @@ cargo test --all-targets && cargo test --doc
 ```
 
 Or, from the repository root, `make test-rs`. For what CI would say,
-including formatting, clippy and the lockfile check, run
+including formatting, Clippy and the lockfile check, run
 `ci/rust/run.sh`.
 
 The suite runs every shared `../test/spec/*.tsv` fixture through the

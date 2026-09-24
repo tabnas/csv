@@ -7,7 +7,7 @@ strict/non-strict modes.
 
 
 [![npm version](https://img.shields.io/npm/v/@tabnas/csv.svg)](https://npmjs.com/package/@tabnas/csv)
-[![build](https://github.com/tabnas/csv/actions/workflows/build.yml/badge.svg)](https://github.com/tabnas/csv/actions/workflows/build.yml)
+[![CI](https://github.com/tabnas/csv/actions/workflows/ci.yml/badge.svg)](https://github.com/tabnas/csv/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/tabnas/csv/badge.svg?branch=main)](https://coveralls.io/github/tabnas/csv?branch=main)
 [![Known Vulnerabilities](https://snyk.io/test/github/tabnas/csv/badge.svg)](https://snyk.io/test/github/tabnas/csv)
 [![DeepScan grade](https://deepscan.io/api/teams/5016/projects/22466/branches/663906/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=5016&pid=22466&bid=663906)
