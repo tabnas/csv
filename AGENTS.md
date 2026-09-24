@@ -837,8 +837,8 @@ examples correct.
   `../vendor/` replaces and a `go work` over every non-vendor-replaced
   module, then `go build`/`go test -v` here.
 
-The Rust gate is staged in `ci/workflows/rust.yml` (see `ci/README.md`):
-it clones `parser`, `json`, `jsonic` and `support` beside the checkout and
+The Rust gate, `.github/workflows/rust.yml` (see `ci/README.md`),
+clones `parser`, `json`, `jsonic` and `support` beside the checkout and
 runs `ci/rust/run.sh`.
 
 ## Agent tooling
