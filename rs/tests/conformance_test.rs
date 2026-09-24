@@ -279,7 +279,7 @@ fn spectrum_upstream_defect_location_coordinates_contradicts_itself() {
 }
 
 // --------------------------------------------------------------------------
-// SUITE 2: golang/go src/encoding/csv @ 3901409b5d0fb7c85a3e6730a59943cc93b2835c
+// SUITE 2: golang/go src/encoding/csv @ 862c888e612ac346c7c4d99c9392bdfd265f33b0
 // --------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]

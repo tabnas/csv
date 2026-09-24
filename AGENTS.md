@@ -228,7 +228,7 @@ runtime, by `ts/test/conformance.test.ts`, `go/conformance_test.go` and
 | Corpus | Pin | Result |
 |---|---|---|
 | [max-mapper/csv-spectrum](https://github.com/max-mapper/csv-spectrum) | `d30e80f` (v2.0.0) | **11/12** by value; 1 upstream defect, pinned |
-| [golang/go `encoding/csv`](https://github.com/golang/go/blob/master/src/encoding/csv/reader_test.go) `readTests` | `3901409` | **39/55** exact; **16** documented divergences; 13 excluded |
+| [golang/go `encoding/csv`](https://github.com/golang/go/blob/master/src/encoding/csv/reader_test.go) `readTests` | `862c888` (go1.27.1) | **39/55** exact; **16** documented divergences; 13 excluded |
 
 The corpora are **not** vendored — `scripts/fetch-csv-suites.sh` fetches them
 at the pinned commits, and both runtimes arrange to run it themselves so a bare
