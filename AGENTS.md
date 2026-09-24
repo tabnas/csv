@@ -825,17 +825,17 @@ examples correct.
 
 ## CI
 
-`.github/workflows/build.yml` has two jobs, neither publishing to npm:
+`.github/workflows/ci.yml` is a caller: it delegates to the org-shared
+`tabnas/.github/.github/workflows/polyglot-ci.yml@main` and passes
+`deps: "parser support debug json jsonic"`, the siblings that workflow
+git-clones and builds this repository against. The operating systems,
+the Node and Go versions and the steps live in that shared workflow,
+and are not restated here. It publishes nothing;
+`.github/workflows/release.yml` handles releases.
 
-- **build** (Ubuntu/Windows/macOS, Node 24): sets
-  `git config --global core.autocrlf false` (CRLF corrupts the `.csv`
-  fixtures, which are marked `binary` in `.gitattributes`), git-clones the
-  tabnas closure (`parser debug json abnf railroad jsonic`) as siblings,
-  `npm i && npm run build` each in topo order, then `npm test` here.
-- **build-go** (Ubuntu/macOS, Go 1.24): clones the same siblings, mirrors
-  `admin/scripts/link.sh` by creating `vendor/` symlinks for any
-  `../vendor/` replaces and a `go work` over every non-vendor-replaced
-  module, then `go build`/`go test -v` here.
+It runs `npm test` in `ts/` and the Go tests in `go/`. The `.csv` and
+`.json` fixtures under `test/fixtures/` are marked `binary` in
+`.gitattributes`, because some tests depend on their line endings.
 
 The Rust gate, `.github/workflows/rust.yml` (see `ci/README.md`),
 clones `parser`, `json`, `jsonic` and `support` beside the checkout and
