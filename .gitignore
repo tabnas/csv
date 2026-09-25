@@ -52,3 +52,5 @@ test/suites/
 
 # --- Rust ---
 target/
+
+.DS_Store
