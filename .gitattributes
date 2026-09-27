@@ -4,3 +4,8 @@
 # Preserve line endings in test fixtures - some tests depend on specific line endings
 test/fixtures/*.csv binary
 test/fixtures/*.json binary
+
+# Vendored third-party corpora: stored and checked out byte for byte, so
+# csv-spectrum's *_crlf.csv files keep their CRLF on every platform and
+# scripts/verify-csv-suites.sh sees exactly the pinned content.
+test/suites/** -text

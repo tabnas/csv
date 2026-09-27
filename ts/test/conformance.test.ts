@@ -6,11 +6,12 @@
 //   valid   -> must parse AND produce the corpus's expected VALUE
 //   invalid -> must be REJECTED with an error
 //
-// The corpora are NOT committed. `scripts/fetch-csv-suites.sh` fetches them at
-// pinned upstream commits into `test/suites/`, which is gitignored. `npm test`
-// runs that script via the `pretest` hook, and if the corpus is still missing
-// this file FAILS LOUDLY rather than skipping. A conformance test that quietly
-// does not run is worse than no test at all.
+// The corpora are vendored under `test/suites/` at pinned upstream revisions;
+// test/suites/README.md credits each one and gives its licence. `npm test`
+// runs `scripts/verify-csv-suites.sh` via the `pretest` hook, which checks the
+// vendored bytes against their pins, and if a corpus is missing this file
+// FAILS LOUDLY rather than skipping. A conformance test that quietly does not
+// run is worse than no test at all.
 //
 // go/conformance_test.go runs the same two corpora with the same divergence
 // table, so TS and Go cannot drift without one of them going red.
@@ -40,8 +41,8 @@ const suitesDir = join(repoRoot, 'test', 'suites')
 const MISSING =
   'Conformance corpus missing under ' +
   suitesDir +
-  '. Run scripts/fetch-csv-suites.sh (npm test does this for you via the ' +
-  'pretest hook). This test must never skip.'
+  '. The corpora are vendored: restore them with `git checkout -- test/suites` ' +
+  '(see test/suites/README.md). This test must never skip.'
 
 function requireDir(dir: string): string {
   if (!existsSync(dir)) throw new Error(MISSING + '\n  expected: ' + dir)

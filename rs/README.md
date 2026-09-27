@@ -212,8 +212,8 @@ shared runner, building a fresh parser from each row's `opts` column, and
 the whole `../test/fixtures` manifest corpus. The conformance tests judge
 the two third-party corpora (csv-spectrum and Go's `encoding/csv`
 `readTests`) with the same divergence table the TypeScript and Go suites
-carry; they run `../scripts/fetch-csv-suites.sh` themselves and FAIL,
-never skip, when a corpus cannot be obtained. Beside them are the
+carry; they read the corpora vendored under `../test/suites`, with no
+network, and FAIL, never skip, when a corpus is missing. Beside them are the
 in-language tests: the API surface, streaming, typed option values, the
 `field.exact` messages, the exported string matcher on a plain jsonic
 instance, the shared default parser under threads, instance reuse, the

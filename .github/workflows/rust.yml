@@ -26,6 +26,7 @@ on:
       - 'ts/embed-grammar.js'
       - 'csv-grammar.jsonic'
       - 'test/fixtures/**'
+      - 'test/suites/**'
       - 'scripts/**'
       - 'ts/package.json'
       - 'ci/rust/**'
@@ -38,6 +39,7 @@ on:
       - 'ts/embed-grammar.js'
       - 'csv-grammar.jsonic'
       - 'test/fixtures/**'
+      - 'test/suites/**'
       - 'scripts/**'
       - 'ts/package.json'
       - 'ci/rust/**'
@@ -71,12 +73,8 @@ jobs:
           git clone --depth 1 https://github.com/tabnas/jsonic.git jsonic
           git clone --depth 1 https://github.com/tabnas/support.git support
 
-      # The conformance tests fetch their corpora through
-      # scripts/fetch-csv-suites.sh, whose go/encoding/csv case extractor
-      # is a Node script. They fail, never skip, without it.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
-        with:
-          node-version: '24.x'
+      # No Node here: the conformance corpora, and the cases.json derived
+      # from Go's reader tests, are vendored under test/suites/.
 
       # Pinned to the MSRV in rs/Cargo.toml rather than to `stable`, so
       # this fails on a change that needs a newer compiler instead of

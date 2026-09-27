@@ -10,20 +10,18 @@ package tabnascsv
 //   valid   -> must parse AND produce the corpus's expected VALUE
 //   invalid -> must be REJECTED with an error
 //
-// The corpora are NOT committed. `scripts/fetch-csv-suites.sh` fetches them at
-// pinned upstream commits into `test/suites/`, which is gitignored. `go test`
-// has no `pretest` hook the way npm does, so this file runs that script itself
-// (once per process, and only when a corpus is actually absent) rather than
-// relying on the caller to have run `make test` first. That is what makes the
-// suite RUN in CI, where the go job is a bare `go test ./...` over a fresh
-// checkout.
+// The corpora are vendored under `test/suites/` at pinned upstream revisions;
+// test/suites/README.md credits each one and gives its licence. A bare
+// `go test ./...` over a fresh checkout reads them directly, with no network
+// and no Node: go/encoding/csv's cases arrive as the committed `cases.json`.
+// `scripts/verify-csv-suites.sh`, run by `npm test`, checks the vendored
+// bytes against their pins.
 //
-// If the fetch cannot happen — no network, no `node` for the case extractor —
-// the affected suite FAILS LOUDLY with the fetch command in the message. It
-// never skips. A conformance suite that quietly does not run reports green
-// while measuring nothing, which is worse than having no suite at all; the
-// TypeScript half throws for the same reason. Once a corpus is present, every
-// case in it is judged and nothing is silently exempt.
+// If a corpus is missing, the affected suite FAILS LOUDLY. It never skips. A
+// conformance suite that quietly does not run reports green while measuring
+// nothing, which is worse than having no suite at all; the TypeScript half
+// throws for the same reason. Every case in a corpus is judged and nothing is
+// silently exempt.
 //
 // On DIVERGENCES: go/encoding/csv is a strict RFC 4180 reader. @tabnas/csv is
 // deliberately a lenient, PapaParse-compatible reader with RFC 4180 quoting
@@ -33,13 +31,10 @@ package tabnascsv
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 
 	jsonic "github.com/tabnas/jsonic/go"
@@ -47,42 +42,15 @@ import (
 
 func suitesDir() string { return filepath.Join("..", "test", "suites") }
 
-const conformanceMissing = "conformance corpus missing under ../test/suites, " +
-	"and scripts/fetch-csv-suites.sh could not supply it (it needs network, " +
-	"and node for the go/encoding/csv case extractor). Run that script by " +
-	"hand — or `make test` — to judge this suite."
+const conformanceMissing = "conformance corpus missing under ../test/suites. " +
+	"The corpora are vendored: restore them with `git checkout -- test/suites` " +
+	"(see test/suites/README.md). This suite fails rather than skips on purpose."
 
-var fetchOnce sync.Once
-var fetchErr error
-
-// fetchCorpora runs the pinned-commit fetch script, at most once per test
-// process. The script is idempotent and returns immediately when a corpus is
-// already present, so calling it costs nothing on a warm tree; it is invoked
-// only from the miss path anyway.
-func fetchCorpora() error {
-	fetchOnce.Do(func() {
-		cmd := exec.Command("bash", filepath.Join("..", "scripts", "fetch-csv-suites.sh"))
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			fetchErr = fmt.Errorf("%w\n%s", err, out)
-		}
-	})
-	return fetchErr
-}
-
-// requireCorpus makes `path` present or FAILS the test. It fetches the corpora
-// first if the path is absent, and calls t.Fatalf if it is still absent after
-// that. It never calls t.Skip: "the corpus could not be obtained" would leave
-// the suite reporting green while judging nothing, so it is a failure here,
-// exactly as it is in the TypeScript half.
+// requireCorpus FAILS the test when `path` is absent. It never calls t.Skip: a
+// missing corpus would leave the suite reporting green while judging nothing,
+// so it is a failure here, exactly as it is in the TypeScript half.
 func requireCorpus(t *testing.T, path string) {
 	t.Helper()
-	if _, err := os.Stat(path); err == nil {
-		return
-	}
-	if err := fetchCorpora(); err != nil {
-		t.Fatalf("%s\n  expected: %s\n  fetch failed: %v", conformanceMissing, path, err)
-	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("%s\n  expected: %s", conformanceMissing, path)
 	}

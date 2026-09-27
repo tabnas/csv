@@ -7,7 +7,7 @@ suite read it, so a change here affects both implementations at once.
 |---|---|
 | `fixtures/` | Our own `.csv` → `.json` fixtures, driven by `fixtures/manifest.json`. Committed. |
 | `spec/*.tsv` | Our own cross-runtime parity fixtures, auto-discovered. Committed. |
-| `suites/` | Third-party conformance corpora, fetched at pinned upstream commits. **Never committed** (gitignored). |
+| `suites/` | Third-party conformance corpora, vendored unchanged at pinned upstream commits, each under its own licence (`suites/README.md`). Committed, never edited. |
 
 ## `spec/*.tsv` — format
 
@@ -70,29 +70,38 @@ was never there.
   `npm test` (from `ts/`) and `cargo test` (from `rs/`) before considering
   it done.
 
-## `suites/` — third-party corpora (gitignored)
+## `suites/` — third-party corpora (vendored)
 
-`spec/` and `fixtures/` are OUR fixtures. The third-party corpora live in
-`suites/` and are never committed — they carry their own licences, and
-pinning them by upstream commit keeps the reported numbers tied to a named
-revision. `scripts/fetch-csv-suites.sh` fetches them:
+`spec/` and `fixtures/` are OUR fixtures. The third-party corpora in
+`suites/` are other people's work, vendored unchanged at pinned upstream
+commits so every runtime judges them offline, and pinned so the reported
+numbers stay tied to a named revision. Each directory carries its upstream
+licence and a `PINNED` file; `suites/README.md` credits the authors and
+records the source, licence and copyright of each. Never edit these files:
+a corpus is replaced whole, from a new upstream revision, with its pins.
 
-- `suites/csv-spectrum/` — `max-mapper/csv-spectrum` @ `d30e80f`, 12 valid
-  documents (the corpus has no must-fail half). Verified after fetch against
-  a pinned document count and a pinned SHA-256 content digest.
+- `suites/csv-spectrum/` — `max-mapper/csv-spectrum` @ `d30e80f`
+  (BSD-2-Clause), 12 valid documents (the corpus has no must-fail half),
+  pinned by document count and a SHA-256 content digest. The three
+  `*_crlf.csv` documents are CRLF, as upstream checks them out;
+  `.gitattributes` marks `suites/` `-text` so git keeps every byte.
 - `suites/go-encoding-csv/` — `golang/go` `src/encoding/csv/reader_test.go`
-  @ tag `go1.27.1`, SHA-256 pinned, converted to `cases.json` by
-  `scripts/extract-go-csv-cases.mjs`: 43 valid + 12 must-fail, 13 excluded.
+  @ tag `go1.27.1` (BSD-3-Clause), SHA-256 pinned, converted to the
+  committed `cases.json` by `scripts/extract-go-csv-cases.mjs`: 43 valid +
+  12 must-fail, 13 excluded.
+
+`scripts/verify-csv-suites.sh` checks all of it, with no network: the pins,
+the counts, the digests, the `PINNED` files, and that `cases.json` is still
+exactly what the extractor derives. `npm test` runs it from the `pretest`
+hook.
 
 Run by `ts/test/conformance.test.ts`, `go/conformance_test.go` and
 `rs/tests/conformance_test.rs`. Both halves are exercised: valid documents
 must produce the **expected value**, invalid documents must be **rejected**.
 
-These tests **must never skip.** `npm test` fetches via the `pretest` hook,
-`go/conformance_test.go` shells out to the same script on the miss path, and
-`rs/tests/conformance_test.rs` runs it once per test binary; if the corpus is
-still absent afterwards, every runtime FAILS. A conformance suite that
-quietly does not run reports green while measuring nothing.
+These tests **must never skip.** A missing corpus FAILS every runtime. A
+conformance suite that quietly does not run reports green while measuring
+nothing.
 
 The scores are asserted, not merely reported — see the "Conformance" section of
 the root [`AGENTS.md`](../AGENTS.md) for the current figures and the divergence

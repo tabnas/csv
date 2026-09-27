@@ -14,9 +14,9 @@
 # https://github.com/tabnas/jsonic and https://github.com/tabnas/support
 # next to this repo before running.
 #
-# The conformance tests fetch their third-party corpora through
-# scripts/fetch-csv-suites.sh (network, plus `node` for the case
-# extractor) and FAIL rather than skip when a corpus cannot be obtained.
+# The conformance tests read the third-party corpora vendored under
+# test/suites/ (no network, no `node`) and FAIL rather than skip when a
+# corpus is missing.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)

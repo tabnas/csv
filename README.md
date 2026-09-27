@@ -88,9 +88,10 @@ at pinned upstream commits:
 
 The divergences are deliberate and individually asserted (a bare `CR` is a
 record separator, stray quotes in an unquoted field are literal text, and so
-on). See [AGENTS.md](AGENTS.md#conformance) for the full table, and
-[`scripts/fetch-csv-suites.sh`](scripts/fetch-csv-suites.sh) to fetch the
-corpora and reproduce the numbers.
+on). See [AGENTS.md](AGENTS.md#conformance) for the full table. Both
+corpora are vendored, unchanged and under their own licences, in
+[`test/suites/`](test/suites/), so the numbers reproduce offline. `npm test`
+checks every file against its pin first.
 
 ## Documentation
 
@@ -124,6 +125,7 @@ differences from TypeScript.
 | [`rs/`](rs/) | Rust port (crate `tabnas-csv`). |
 | [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, embedded into every runtime. |
 | [`test/fixtures/`](test/fixtures/) | Shared conformance fixtures, exercised by every runtime. |
+| [`test/suites/`](test/suites/) | Third-party conformance corpora, vendored at pinned upstream revisions. |
 
 ## Grammar
 
@@ -143,6 +145,26 @@ The live grammar as a railroad/syntax diagram, generated with
 
 ASCII version: [`ts/doc/grammar.txt`](ts/doc/grammar.txt).
 
+## Acknowledgements
+
+The conformance suites stand on test data other people wrote and shared.
+Thank you to:
+
+- **Max Ogden and the csv-spectrum contributors**, for
+  [csv-spectrum](https://github.com/max-mapper/csv-spectrum) (BSD-2-Clause),
+  an acid test for CSV parsers.
+- **The csvkit authors**, Christopher Groskopf and contributors, whose
+  [csvkit](https://github.com/wireservice/csvkit) examples (MIT) seeded part
+  of csv-spectrum.
+- **The Go Authors**, for the `readTests` in Go's
+  [`encoding/csv`](https://github.com/golang/go/tree/master/src/encoding/csv)
+  reader tests (BSD-3-Clause).
+
+Each corpus keeps its own licence. [`test/suites/README.md`](test/suites/README.md)
+records its source, revision, licence, and copyright.
+
 ## License
 
-MIT. Copyright (c) Richard Rodger and other contributors.
+MIT. Copyright (c) Richard Rodger and other contributors. The vendored
+corpora in [`test/suites/`](test/suites/) keep their own licences, listed
+under Acknowledgements.
