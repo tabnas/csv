@@ -90,10 +90,13 @@ a corpus is replaced whole, from a new upstream revision, with its pins.
   committed `cases.json` by `scripts/extract-go-csv-cases.mjs`: 43 valid +
   12 must-fail, 13 excluded.
 
-`scripts/verify-csv-suites.sh` checks all of it, with no network: the pins,
-the counts, the digests, the `PINNED` files, and that `cases.json` is still
-exactly what the extractor derives. `npm test` runs it from the `pretest`
-hook.
+`scripts/verify-csv-suites.sh` checks every vendored file, with no network:
+the document counts and content digest, the `reader_test.go` sha256, the
+`PINNED` files, that `cases.json` is still exactly what the extractor
+derives, and a SHA-256 pin on each remaining file (csv-spectrum's
+`readme.md` and `package.json`, and both `LICENSE` files). A file under
+`suites/` that no check covers fails it too; `suites/README.md`, ours, is
+the one exemption. `npm test` runs it from the `pretest` hook.
 
 Run by `ts/test/conformance.test.ts`, `go/conformance_test.go` and
 `rs/tests/conformance_test.rs`. Both halves are exercised: valid documents

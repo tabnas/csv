@@ -140,4 +140,47 @@ if ! cmp -s "$tmp/cases.json" "$GO_DIR/cases.json"; then
 fi
 echo "go/encoding/csv: cases.json matches its extraction"
 
+# --- The rest of the vendored files ---------------------------------------
+
+# The upstream readme and package.json csv-spectrum ships, and each corpus's
+# LICENSE, pinned by SHA-256 so attribution and licensing material cannot
+# drift from what was vendored. csv-spectrum has no licence file upstream;
+# its LICENSE is ours (see test/suites/README.md), and is pinned all the same.
+FILE_PINS="
+ea7f67842290f9cf79d4b5801128f3e56b8b54f7fb86a495f43a9d566fcedd1e  csv-spectrum/readme.md
+d3f24d28af40679704bcb13e0c99078ecf0860619325f1cb27c858d72c64a5c2  csv-spectrum/package.json
+94284c02fb66dfac1603a7b9287ffdabdfeca301e733cdbb2acbce60d057d1c5  csv-spectrum/LICENSE
+911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad  go-encoding-csv/LICENSE
+"
+while read -r want rel; do
+  [ -n "$rel" ] || continue
+  [ -f "$SUITES/$rel" ] || fail "missing $SUITES/$rel"
+  got="$(sha256_of "$SUITES/$rel")"
+  [ "$got" = "$want" ] || fail "$rel: sha256 mismatch
+  expected $want
+  got      $got"
+done <<<"$FILE_PINS"
+echo "readmes, package.json and licences verified"
+
+# Every file under test/suites/ must be one a check above covers, so nothing
+# is vendored unverified. README.md is the one exemption: it is ours, the
+# page that credits the corpora.
+covered() {
+  case "$1" in
+    README.md) return 0 ;;
+    csv-spectrum/PINNED | go-encoding-csv/PINNED) return 0 ;;
+    csv-spectrum/csvs/*.csv | csv-spectrum/json/*.json) return 0 ;;
+    go-encoding-csv/reader_test.go | go-encoding-csv/cases.json) return 0 ;;
+  esac
+  printf '%s\n' "$FILE_PINS" | awk 'NF == 2 { print $2 }' | grep -qxF "$1"
+}
+unverified=""
+while IFS= read -r rel; do
+  covered "$rel" || unverified="$unverified
+  $rel"
+done < <(cd "$SUITES" && LC_ALL=C find . -type f | sed 's#^\./##' | LC_ALL=C sort)
+[ -z "$unverified" ] ||
+  fail "files under test/suites/ that no pin covers:$unverified
+  Pin each one here, or remove it."
+
 echo "conformance corpora verified under $SUITES"

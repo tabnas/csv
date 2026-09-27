@@ -249,9 +249,12 @@ counters, which fail if a case slips through.
 `scripts/verify-csv-suites.sh` holds the pins and checks the vendored bytes
 against them: the `go/encoding/csv` source is SHA-256 pinned, csv-spectrum is
 checked against a pinned document count and a pinned SHA-256 digest over the
-corpus content, each directory's `PINNED` must name its revision, and
+corpus content, each directory's `PINNED` must name its revision,
 `cases.json` must be exactly what the extractor derives from the pinned
-source. `npm test` runs it from the `pretest` hook, so CI checks the pins on
+source, and every remaining vendored file (the upstream readme and
+`package.json`, both licences) is SHA-256 pinned. A file under
+`test/suites/` that no check covers fails the script, so nothing is
+vendored unverified. `npm test` runs it from the `pretest` hook, so CI checks the pins on
 every OS the TypeScript job covers. To move a pin, replace the files from the
 new upstream revision and update the pin, the count and the digest together;
 never relax a check to get green.
