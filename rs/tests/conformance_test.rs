@@ -6,22 +6,18 @@
 //   valid   -> must parse AND produce the corpus's expected VALUE
 //   invalid -> must be REJECTED with an error
 //
-// The corpora are NOT committed. `scripts/fetch-csv-suites.sh` fetches
-// them at pinned upstream commits into `test/suites/`, which is
-// gitignored. `cargo test` has no `pretest` hook the way npm does, so this
-// file runs that script itself, once per test binary, before anything
-// reads a corpus; it is idempotent, verifies the pins on every run, and
-// touches the network only for what is missing. That is what makes the
-// suite RUN in CI, where the job is a bare `cargo test` over a fresh
-// checkout.
+// The corpora are vendored under `test/suites/` at pinned upstream
+// revisions; test/suites/README.md credits each one and gives its
+// licence. A bare `cargo test` over a fresh checkout reads them directly,
+// with no network and no Node: go/encoding/csv's cases arrive as the
+// committed `cases.json`. `scripts/verify-csv-suites.sh`, run by
+// `npm test`, checks the vendored bytes against their pins.
 //
-// If the fetch cannot happen (no network, no `node` for the case
-// extractor) the affected suite FAILS LOUDLY with the fetch command in
-// the message. It never skips. A conformance suite that quietly does not
-// run reports green while measuring nothing, which is worse than having
-// no suite at all; the TypeScript and Go halves fail for the same reason.
-// Once a corpus is present, every case in it is judged and nothing is
-// silently exempt.
+// If a corpus is missing, the affected suite FAILS LOUDLY. It never
+// skips. A conformance suite that quietly does not run reports green
+// while measuring nothing, which is worse than having no suite at all;
+// the TypeScript and Go halves fail for the same reason. Every case in a
+// corpus is judged and nothing is silently exempt.
 //
 // On DIVERGENCES: go/encoding/csv is a strict RFC 4180 reader. @tabnas/csv
 // is deliberately a lenient, PapaParse-compatible reader with RFC 4180
@@ -35,8 +31,6 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
 
 use serde::Deserialize;
 use serde_json::{json, Value as Json};
@@ -47,50 +41,13 @@ fn suites_dir() -> PathBuf {
     repo_root().join("test").join("suites")
 }
 
-const MISSING: &str = "conformance corpus missing under test/suites, and \
-scripts/fetch-csv-suites.sh could not supply it (it needs network, and node for the \
-go/encoding/csv case extractor). Run that script by hand, or `make test`, to judge \
-this suite. This fails rather than skips on purpose: a conformance suite that quietly \
-does not run reports green while measuring nothing.";
+const MISSING: &str = "conformance corpus missing under test/suites. The corpora are \
+vendored: restore them with `git checkout -- test/suites` (see test/suites/README.md). \
+This fails rather than skips on purpose: a conformance suite that quietly does not run \
+reports green while measuring nothing.";
 
-/// Run the pinned-commit fetch script, at most once per test binary. It
-/// is idempotent and verifies the pins whether or not it fetched, so a
-/// truncated or tampered corpus fails here rather than grading.
-fn fetch_corpora() -> Result<(), String> {
-    static FETCHED: OnceLock<Result<(), String>> = OnceLock::new();
-    FETCHED
-        .get_or_init(|| {
-            let script = repo_root().join("scripts").join("fetch-csv-suites.sh");
-            let output = Command::new("bash")
-                .arg(&script)
-                .current_dir(repo_root())
-                .output()
-                .map_err(|error| format!("could not run {}: {error}", script.display()))?;
-            if output.status.success() {
-                Ok(())
-            } else {
-                Err(format!(
-                    "{} exited {}\n{}{}",
-                    script.display(),
-                    output.status,
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                ))
-            }
-        })
-        .clone()
-}
-
-/// Make `path` present or FAIL the test. Never a skip.
+/// FAIL the test when `path` is absent. Never a skip.
 fn require_corpus(path: &Path) {
-    if let Err(error) = fetch_corpora() {
-        assert!(
-            path.exists(),
-            "{MISSING}\n  expected: {}\n  fetch failed: {error}",
-            path.display()
-        );
-        panic!("{MISSING}\n  the corpus at {} is present but its pins could not be verified:\n  {error}", path.display());
-    }
     assert!(path.exists(), "{MISSING}\n  expected: {}", path.display());
 }
 

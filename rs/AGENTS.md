@@ -12,7 +12,7 @@ what is specific to this crate.
 | `src/lib.rs` | the whole port: the embedded grammar, `CsvOptions`, every closure the grammar names, the RFC 4180 string matcher, the `list` / `elem` / `val` rule modifications, `csv`, `plugin`, `plugin_with`, `make`, `make_with`, `parse` |
 | `tests/parity_test.rs` | every `../test/spec/*.tsv` fixture through `tabnas_support::Runner::new_with_row`, a fresh parser per row from its `opts` column |
 | `tests/csv_test.rs` | the in-language port of `go/csv_test.go` and `ts/test/csv.test.ts`: the `../test/fixtures` manifest corpus (with its engine-level `jsonicOpt`), the API surface, streaming, typed options, `field.exact` messages, prototype-pollution keys, `derive`, threads |
-| `tests/conformance_test.rs` | the two third-party corpora, with the divergence table; runs `../scripts/fetch-csv-suites.sh` itself and FAILS when a corpus is absent |
+| `tests/conformance_test.rs` | the two third-party corpora vendored under `../test/suites`, with the divergence table; FAILS when a corpus is absent |
 | `tests/csv_export_test.rs` | the exported string matcher on a plain jsonic instance (`go/csv_export_test.go`) |
 | `tests/perf_test.rs` | instance reuse beats rebuild-per-parse by 4x (`go/perf_test.go`, `ts/test/perf.test.ts`) |
 | `tests/embed_test.rs` | the embedded grammar equals `../csv-grammar.jsonic` |
@@ -137,18 +137,15 @@ were a Rust-only test while Go answered them with the text as written.
 
 ## The conformance corpora
 
-`tests/conformance_test.rs` runs `../scripts/fetch-csv-suites.sh` once
-per test binary, on every run (the script is idempotent and verifies the
-pinned digests whether or not it fetched), and then judges
-`../test/suites`. A missing corpus is a FAILURE, never a skip.
+`tests/conformance_test.rs` judges the corpora vendored under
+`../test/suites`, reading the committed files directly: no network, no
+Node, no script. A missing corpus is a FAILURE, never a skip.
 
-The script fetches csv-spectrum from `codeload.github.com`, which some
-sandboxes refuse while allowing `github.com` clones. The script does not
-need to do the fetch itself: lay out `test/suites/csv-spectrum/{csvs,json}`
-from a checkout of `max-mapper/csv-spectrum` at the pinned commit and
-re-run it; it verifies the document count and the content digest and
-carries on to the Go source, which comes from `raw.githubusercontent.com`.
-The corpus directory is gitignored.
+The pins are checked by `../scripts/verify-csv-suites.sh`, which `npm test`
+runs from its `pretest` hook; this crate does not run it. The corpora used
+to be fetched at test time, and a sandbox that refused
+`codeload.github.com` could not run this suite at all. See
+`../test/suites/README.md` for what is vendored and under which licence.
 
 ## What a fixture cannot hold
 

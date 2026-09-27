@@ -335,7 +335,7 @@ true,[1,2],{x:{y:"q\\"w"}}
   // NOTE: csv-spectrum used to be run from here, off the `csv-spectrum` npm
   // devDependency — an UNPINNED `^2.0.0`, so the set under test moved whenever
   // the registry did. It now lives in ts/test/conformance.test.ts, driven by
-  // the corpus fetched at a pinned commit by scripts/fetch-csv-suites.sh, with
+  // the corpus vendored at a pinned commit under test/suites/, with
   // all 12 documents accounted for (including the upstream-defective
   // `location_coordinates`, which is asserted rather than skipped) and the
   // same corpus run by go/conformance_test.go. Do not reinstate a second,

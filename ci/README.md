@@ -40,6 +40,7 @@ Both of these were staged here and now run from `.github/workflows/`:
   versions) on the MSRV pinned in `rs/Cargo.toml`. It clones
   `tabnas/parser`, `tabnas/json`, `tabnas/jsonic` and `tabnas/support`
   beside the checkout, because the crate takes all four as path
-  dependencies and none is published, and sets up Node for the corpus
-  extractor `scripts/fetch-csv-suites.sh` runs. `make test-rs` is the
-  fast local loop; the script is what CI runs.
+  dependencies and none is published. The conformance corpora are
+  vendored under `test/suites/`, so the job needs no network for them
+  and no Node. `make test-rs` is the fast local loop; the script is what
+  CI runs.

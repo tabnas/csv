@@ -25,7 +25,9 @@
 [Bb]ool
 [Bb]ooleans
 (?:[Cc]sv|CSV)
+csvkit
 Clippy
+Groskopf
 [Jj]sonic
 [Ll]exes
 [Ll]ockfile
@@ -38,4 +40,5 @@ npm
 [Tt]okenizer
 [Uu]nescaped
 [Vv]alidator
+[Vv]endored
 Voxgig
