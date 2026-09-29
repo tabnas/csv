@@ -33,7 +33,7 @@ go get github.com/tabnas/csv/go
 [dependencies]
 tabnas-csv = { path = "../csv/rs" }
 tabnas-jsonic = { path = "../jsonic/rs" }
-tabnas = { path = "../parser/rs" }
+tabnas = { package = "tabnas-parser", path = "../parser/rs" }
 ```
 
 ## One tiny example
