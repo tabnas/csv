@@ -42,11 +42,11 @@ function make(options?: CsvMakeOptions): Tabnas
 ```
 
 Returns a new Tabnas instance with the jsonic grammar and the `Csv`
-plugin installed, configured with `options`. It is exactly
-`new Tabnas().use(jsonic).use(Csv, options)`, so the option keys are the
-ones in the table below and a parse gives the same result either way.
-Each call builds a fresh instance. It is the counterpart of the Go
-`Make` and the Rust `make_with`.
+plugin installed, configured with `options`. The call does exactly what
+`new Tabnas().use(jsonic).use(Csv, options)` does, so the option keys are
+the ones in the table below and a parse gives the same result either
+way. Each call builds a fresh instance. The Go counterpart is `Make`,
+and the Rust one is `make_with`.
 
 `CsvMakeOptions` is `CsvOptions` with every key optional, the nested
 `field`, `record` and `string` groups included.

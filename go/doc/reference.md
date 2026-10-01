@@ -15,22 +15,23 @@ The Jsonic plugin that installs the CSV grammar and options. Register
 with `j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, overrides...)`. The function
 is idempotent: re-invoking it on the same instance is a no-op.
 
-## `Make` (constructor)
+## `Make`
 
 ```go
 func Make(options ...map[string]any) (*tabnasjsonic.Jsonic, error)
 ```
 
 Returns a new jsonic instance with the CSV plugin installed and
-configured with `options`. It is exactly `tabnasjsonic.Make()` followed
-by `j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, options)`, so the
+configured with `options`. The call does exactly what
+`tabnasjsonic.Make()` followed by
+`j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, options)` does, so the
 option keys are the ones under [Option keys](#option-keys) and a parse
-gives the same result either way. More than one map is merged in order,
-and a later key wins. Each call builds a fresh instance.
+gives the same result either way. `Make` merges more than one map in
+order, and a later key wins. Each call builds a fresh instance.
 
 The error is the plugin's own refusal of an option value, such as
-`ErrCyclicOption`; on error the instance is `nil`. It is the
-counterpart of the TypeScript `make` and the Rust `make_with`.
+`ErrCyclicOption`, and the instance is `nil` when there is one. The
+TypeScript counterpart is `make`, and the Rust one is `make_with`.
 
 ```go
 j, err := tabnascsv.Make(map[string]any{
