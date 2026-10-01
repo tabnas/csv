@@ -718,6 +718,24 @@ Csv.defaults = {
   },
 } as CsvOptions
 
-export { Csv, buildCsvStringMatcher, VERSION }
+// The options `make` takes: any part of `CsvOptions`, nested groups
+// included, so `{ field: { separation: ';' } }` needs no other field key.
+// The plugin merges them over `Csv.defaults`, exactly as `.use(Csv, opts)`.
+type CsvMakeOptions = Partial<Omit<CsvOptions, 'field' | 'record' | 'string'>> & {
+  field?: Partial<CsvOptions['field']>
+  record?: Partial<CsvOptions['record']>
+  string?: Partial<CsvOptions['string']>
+}
 
-export type { CsvOptions }
+// Create a CSV parser instance: a tabnas engine with the jsonic base
+// grammar and this plugin installed, configured with `options`. It is
+// exactly `new Tabnas().use(jsonic).use(Csv, options)`, the counterpart
+// of the Go `Make` and the Rust `make_with`, so the two routes cannot
+// drift: there is one plugin and this is only a way to call it.
+function make(options?: CsvMakeOptions): Tabnas {
+  return new Tabnas().use(jsonic).use(Csv, options ?? {})
+}
+
+export { Csv, make, buildCsvStringMatcher, VERSION }
+
+export type { CsvOptions, CsvMakeOptions }

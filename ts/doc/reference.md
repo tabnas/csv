@@ -8,15 +8,17 @@ background see [concepts](concepts.md).
 ## Exports
 
 ```typescript
-import { Csv, buildCsvStringMatcher } from '@tabnas/csv'
-import type { CsvOptions } from '@tabnas/csv'
+import { Csv, make, buildCsvStringMatcher } from '@tabnas/csv'
+import type { CsvOptions, CsvMakeOptions } from '@tabnas/csv'
 ```
 
 | Export | Kind | Purpose |
 |---|---|---|
 | `Csv` | `Plugin` | The Tabnas plugin. Pass to `Tabnas.use()`. |
+| `make` | function | Build a ready-to-parse CSV parser with options in one call. |
 | `buildCsvStringMatcher` | function | Factory for the RFC 4180 quote matcher (advanced). |
 | `CsvOptions` | type | The full options shape. |
+| `CsvMakeOptions` | type | The partial options `make` takes. |
 
 ## `Csv` (plugin)
 
@@ -32,6 +34,28 @@ so you only specify what differs.
 
 `Csv.defaults` is attached to the plugin and holds the complete default
 option set (see the table below).
+
+## `make(options?)`
+
+```typescript
+function make(options?: CsvMakeOptions): Tabnas
+```
+
+Returns a new Tabnas instance with the jsonic grammar and the `Csv`
+plugin installed, configured with `options`. It is exactly
+`new Tabnas().use(jsonic).use(Csv, options)`, so the option keys are the
+ones in the table below and a parse gives the same result either way.
+Each call builds a fresh instance. It is the counterpart of the Go
+`Make` and the Rust `make_with`.
+
+`CsvMakeOptions` is `CsvOptions` with every key optional, the nested
+`field`, `record` and `string` groups included.
+
+```js
+const { make } = require('@tabnas/csv')
+
+make({ field: { separation: ';' } }).parse('a;b\n1;2') // => [{ a: '1', b: '2' }]
+```
 
 ## `CsvOptions`
 

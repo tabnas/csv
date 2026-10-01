@@ -66,6 +66,9 @@ result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 // [map[name:Alice age:30] map[name:Bob age:25]]
 ```
 
+TypeScript `make(options)` and Go `tabnascsv.Make(options)` build the
+same configured parser in one call, as Rust `make_with` does.
+
 **Rust**
 
 ```rust
