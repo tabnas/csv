@@ -9,7 +9,7 @@ what is specific to this crate.
 
 | Path | |
 |---|---|
-| `src/lib.rs` | the whole port: the embedded grammar, `CsvOptions`, every closure the grammar names, the RFC 4180 string matcher, the `list` / `elem` / `val` rule modifications, `csv`, `plugin`, `plugin_with`, `make`, `make_with`, `parse` |
+| `src/lib.rs` | the whole port: the embedded grammar, `CsvOptions`, every closure the grammar names, the RFC 4180 string matcher, the `list` / `elem` / `val` rule modifications, `csv`, `plugin`, `plugin_with`, `make`, `make_with`, `parse`, and the translation part `manifest_text`, `include_str!` of the copy in `translate/` |
 | `tests/parity_test.rs` | every `../test/spec/*.tsv` fixture through `tabnas_support::Runner::new_with_row`, a fresh parser per row from its `opts` column |
 | `tests/csv_test.rs` | the in-language port of `go/csv_test.go` and `ts/test/csv.test.ts`: the `../test/fixtures` manifest corpus (with its engine-level `jsonicOpt`), the API surface, streaming, typed options, `field.exact` messages, prototype-pollution keys, `derive`, threads |
 | `tests/conformance_test.rs` | the two third-party corpora vendored under `../test/suites`, with the divergence table; FAILS when a corpus is absent |
@@ -17,6 +17,8 @@ what is specific to this crate.
 | `tests/perf_test.rs` | instance reuse beats rebuild-per-parse by 4x (`go/perf_test.go`, `ts/test/perf.test.ts`) |
 | `tests/embed_test.rs` | the embedded grammar equals `../csv-grammar.jsonic` |
 | `tests/version_test.rs` | Cargo.toml == `VERSION` == ts/package.json |
+| `tests/translate_test.rs` | the translation part: the embedded manifest is `../tabnas.plugin.json`, and its `translate` object reads a tree and writes records through the `csv` render alchemy carries, and its loss lines are sentences |
+| `translate/` | the crate's copy of `../tabnas.plugin.json` (as `manifest.json`), which a packaged crate needs; `tests/translate_test.rs` holds it to the file |
 | `tests/common/mod.rs` | shared helpers: the per-row parser, the `jsonicOpt` applier, JSON flattening, failure conversion |
 | `README.md` | the crate front page, prose-gated; its `rust` fences are doctests of this crate (see below) |
 
