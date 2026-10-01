@@ -29,6 +29,12 @@ makeRunner({
       .use(Csv, '' === opts.trim() ? {} : JSON.parse(opts))
       .parse(input)
   },
+
+  // Where an `ERROR:<code>@<row>:<col>` row says the error is reported.
+  // A TabnasError carries it as `lineNumber` / `columnNumber`, while the
+  // runner's default reads `row` / `col`, which it does not have. The Go
+  // error's `Row` / `Col` and the Rust failure's position need no hook.
+  errorPos: (err: any) => ({ row: err?.lineNumber, col: err?.columnNumber }),
 })
   // `findSpecDir` walks up from this file — `dist-test/` at runtime — to the
   // repo root's `test/spec`, so moving the suite does not mean recounting

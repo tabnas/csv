@@ -73,7 +73,7 @@ is what you want for "normal" CSV.
 **Non-strict mode** (`"strict": false`). Field bodies are parsed *as
 jsonic*. Scalars (`true`, `false`, `null`, numbers) decode to native Go
 types, and structural jsonic values inside a cell work too: `[1,2]`
-becomes `[]any{1, 2}`, `{x:1}` becomes `map[string]any{"x": 1}`. Quoted
+becomes `[]any{1, 2}`, `{x:1}` becomes a `*tabnasjsonic.OrderedMap` holding `x: 1`. Quoted
 strings honour jsonic's escape rules (for example `"a\"b"`) rather than CSV's
 `""`-doubling. To make this convenient, non-strict mode also flips
 `trim`, `comment`, `number`, and `value` on by default. The trade-off
@@ -123,11 +123,13 @@ line.
 
 ## Object output
 
-When `object: true` (the default), each record is a plain
-`map[string]any`. Type-assert and read it directly, or pass it to
-`json.Marshal`. Note that Go's `json.Marshal` sorts map keys
-alphabetically; if you need to preserve column order in JSON output,
-use `object: false` and emit your own JSON from the arrays.
+When `object: true` (the default), each record is a
+`*tabnasjsonic.OrderedMap`, the engine's insertion-ordered map. Its
+`Keys` hold the field names in header order, and its `Vals` map each
+name to its value. Read a field with `Get` or from `Vals`, walk the
+columns in order through `Keys`, or pass the record to `json.Marshal`,
+which writes the columns in that same order. TypeScript and Rust
+records keep the same order.
 
 When a record has more fields than the header has names, extra columns
 are emitted under keys `field~0`, `field~1`, …; the prefix is
@@ -212,7 +214,7 @@ Go returns `any`, but the concrete types are predictable:
 
 | Value | Go type |
 |---|---|
-| A record (object output) | `map[string]any` |
+| A record (object output) | `*tabnasjsonic.OrderedMap` |
 | A record (slice output) | `[]any` |
 | Top-level result | `[]any` |
 | Strings / raw text | `string` |

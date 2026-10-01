@@ -63,8 +63,8 @@ func main() {
     }
 
     for _, r := range result.([]any) {
-        row := r.(map[string]any)
-        fmt.Printf("%s is %s\n", row["name"], row["age"])
+        row := r.(*tabnasjsonic.OrderedMap)
+        fmt.Printf("%s is %s\n", row.Vals["name"], row.Vals["age"])
     }
     // Alice is 30
     // Bob is 25
@@ -72,7 +72,8 @@ func main() {
 ```
 
 The first row was treated as a header (the default), and each
-subsequent row became a `map[string]any` keyed by those names. `30` and
+subsequent row became a `*tabnasjsonic.OrderedMap` keyed by those names,
+in header order. `30` and
 `25` are *strings*: strict mode is on by default, and strict mode keeps
 every field as the raw text it appeared as.
 

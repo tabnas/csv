@@ -379,7 +379,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				}
 
 				if objres {
-					obj := make(map[string]any)
+					// The engine's insertion-ordered map, so a record keeps
+					// its fields in header order, then the unnamed extras in
+					// column order, as the canonical object does (and Rust's
+					// IndexMap). A caller that walks a record sees the
+					// columns as the file wrote them, and json.Marshal writes
+					// them that way. Set keeps a repeated name at its FIRST
+					// column and takes its LAST value, which is what
+					// assigning to a JavaScript object does. A plain
+					// map[string]any has no order to keep, so every caller
+					// got Go's own instead.
+					obj := jsonic.NewOrderedMap()
 					i := 0
 
 					if fields != nil {
@@ -421,7 +431,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 							if fI < len(record) && !jsonic.IsUndefined(record[fI]) {
 								val = record[fI]
 							}
-							obj[name] = val
+							obj.Set(name, val)
 						}
 						i = len(fields)
 					}
@@ -432,7 +442,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 						if jsonic.IsUndefined(val) {
 							val = emptyField
 						}
-						obj[fname] = val
+						obj.Set(fname, val)
 					}
 
 					if stream != nil {
@@ -795,6 +805,11 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 			qLen := len(q)
 			rI := pnt.RI
 			cI := pnt.CI
+			// The row the quote opened on. The loop below moves pnt.RI on
+			// at every row character it passes, so a field that never
+			// closes puts it back before its error token takes a position,
+			// as the canonical does (`pnt.rI = qrI`).
+			qRI := pnt.RI
 			sI += qLen
 			cI += qLen
 
@@ -857,6 +872,11 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 				s.WriteString(src[bI:sI])
 			}
 
+			// Report the error where the quote opened, not where the source
+			// ran out. pnt.SI and pnt.CI still name the quote; only the row
+			// has moved. For `a,b\n1,2\n3,"x\n4,5\n` that is 3:3, as in
+			// TypeScript and Rust, where this port once said 5:3.
+			pnt.RI = qRI
 			badSrc := src[pnt.SI:sI]
 			tkn := lex.Token("#BD", jsonic.TinBD, nil, badSrc)
 			tkn.Why = "unterminated_string"
