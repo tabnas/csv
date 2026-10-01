@@ -345,6 +345,38 @@ describe('csv', () => {
     })
   })
 
+  // A record lists its fields in HEADER order, then any unnamed extras in
+  // column order. deepEqual ignores key order, so the keys are read out.
+  // The header is not alphabetical, so header order and sorted order
+  // differ. The Go and Rust suites hold the same cases; the Go port once
+  // built a record as a map[string]any and lost the order.
+  test('records keep the header order', () => {
+    const j = new Tabnas().use(jsonic).use(Csv)
+    const keys = (src: string) => j.parse(src).map((r: any) => Object.keys(r))
+
+    assert.deepEqual(keys('name,age,city\nAda,36,Paris\nLin,28,Oslo'), [
+      ['name', 'age', 'city'],
+      ['name', 'age', 'city'],
+    ])
+    assert.deepEqual(keys('b,a\n1,2,3,4'), [['b', 'a', 'field~2', 'field~3']])
+
+    // A repeated name keeps its FIRST place and takes the LAST value.
+    assert.deepEqual(keys('b,a,b\n1,2,3'), [['b', 'a']])
+    assert.equal(JSON.stringify(j.parse('b,a,b\n1,2,3')), '[{"b":"3","a":"2"}]')
+
+    // A streamed record is the same ordered record.
+    const streamed: any[] = []
+    new Tabnas()
+      .use(jsonic)
+      .use(Csv, {
+        stream: (what: string, record?: any) => {
+          if ('record' === what) streamed.push(record)
+        },
+      })
+      .parse('name,age,city\nAda,36,Paris')
+    assert.deepEqual(streamed.map((r) => Object.keys(r)), [['name', 'age', 'city']])
+  })
+
   test('unstrict', async () => {
     const j = new Tabnas().use(jsonic).use(Csv, { strict: false })
     let d0 = j.parse(`a,b,c

@@ -906,6 +906,78 @@ fn stream() {
     assert_eq!(events.len(), 5);
 }
 
+// ---------------------------------------------------------------------------
+// Record key order (TestRecordsKeepTheHeaderOrder / `records keep the header
+// order`)
+// ---------------------------------------------------------------------------
+
+/// The keys of each record, in order. `json!` equality ignores key order,
+/// as an `IndexMap` compares as a map, so the keys are read out.
+fn record_keys(value: &Json) -> Vec<Vec<String>> {
+    value
+        .as_array()
+        .expect("an array of records")
+        .iter()
+        .map(|record| {
+            record
+                .as_object()
+                .expect("a record object")
+                .keys()
+                .cloned()
+                .collect()
+        })
+        .collect()
+}
+
+/// A record lists its fields in HEADER order, then any unnamed extras in
+/// column order. The header is not alphabetical, so header order and
+/// sorted order differ. The Go and TypeScript suites hold the same cases;
+/// the Go port once built a record as a `map[string]any` and lost the
+/// order.
+#[test]
+fn records_keep_the_header_order() {
+    assert_eq!(
+        record_keys(&must_default("name,age,city\nAda,36,Paris\nLin,28,Oslo")),
+        vec![vec!["name", "age", "city"], vec!["name", "age", "city"]]
+    );
+    assert_eq!(
+        record_keys(&must_default("b,a\n1,2,3,4")),
+        vec![vec!["b", "a", "field~2", "field~3"]]
+    );
+
+    // A repeated name keeps its FIRST place and takes the LAST value.
+    let repeated = must_default("b,a,b\n1,2,3");
+    assert_eq!(record_keys(&repeated), vec![vec!["b", "a"]]);
+    assert_eq!(
+        serde_json::to_string(&repeated).expect("serialises"),
+        r#"[{"b":"3","a":"2"}]"#
+    );
+
+    // A streamed record is the same ordered record.
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&events);
+    let parser = parser_with(CsvOptions {
+        stream: Some(Stream::new(move |event| {
+            sink.lock().expect("the event log").push(event);
+        })),
+        ..Default::default()
+    });
+    parser.parse("name,age,city\nAda,36,Paris").expect("parses");
+    let streamed: Vec<Json> = events
+        .lock()
+        .expect("the event log")
+        .iter()
+        .filter_map(|event| match event {
+            StreamEvent::Record(record) => Some(to_json(record)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        record_keys(&Json::Array(streamed)),
+        vec![vec!["name", "age", "city"]]
+    );
+}
+
 // A quote the RFC 4180 matcher cannot fire for leaves the jsonic string
 // matcher to read the quotes, because every runtime keeps that matcher ON
 // in strict mode: `string.quote: ""` reads `"x y"` as the string `x y`,

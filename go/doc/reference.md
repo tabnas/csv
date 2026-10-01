@@ -107,7 +107,8 @@ Nested `string` group:
 `j.Parse(src)` returns `(any, error)`. On success the value is a `[]any`
 whose elements are:
 
-- `map[string]any` keyed by field name when `object: true` (default)
+- `*tabnasjsonic.OrderedMap` keyed by field name, in header order, when
+  `object: true` (default)
 - `[]any` (a slice of fields) when `object: false`
 
 The result is an empty `[]any{}` for empty input, and an empty `[]any{}`

@@ -622,19 +622,76 @@ func TestEmptyAnyType(t *testing.T) {
 	}
 }
 
-func TestObjectOutputIsMap(t *testing.T) {
-	// Records under default options must be plain map[string]any so
-	// external callers can read them and json.Marshal them sensibly.
-	r, err := csvParse("name,age\nAlice,30\nBob,25")
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+// A record under default options is the engine's *jsonic.OrderedMap, in
+// HEADER order, then any unnamed extra fields in column order, as the
+// canonical object and the Rust IndexMap are. It was a map[string]any,
+// so a caller walking a record met Go's own order, and json.Marshal
+// sorted the names. External callers can still read it (Get, Keys, Vals)
+// and json.Marshal it, which now writes the columns as the file did. The
+// header here is not alphabetical, so header order and sorted order
+// differ. The TypeScript and Rust suites hold the same cases.
+func TestRecordsKeepTheHeaderOrder(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		keys []string
+		json string
+	}{
+		{"header order", "name,age,city\nAda,36,Paris\nLin,28,Oslo",
+			[]string{"name", "age", "city"},
+			`[{"name":"Ada","age":"36","city":"Paris"},{"name":"Lin","age":"28","city":"Oslo"}]`},
+		{"extra fields follow", "b,a\n1,2,3,4",
+			[]string{"b", "a", "field~2", "field~3"},
+			`[{"b":"1","a":"2","field~2":"3","field~3":"4"}]`},
+		// Assigning a repeated name keeps its FIRST place and takes the
+		// LAST value, as a JavaScript object does.
+		{"a repeated name keeps its first place", "b,a,b\n1,2,3",
+			[]string{"b", "a"},
+			`[{"b":"3","a":"2"}]`},
 	}
-	if _, ok := r[0].(map[string]any); !ok {
-		t.Fatalf("expected map[string]any, got %T", r[0])
+	for _, c := range cases {
+		r, err := csvParse(c.src)
+		if err != nil {
+			t.Fatalf("%s: parse: %v", c.name, err)
+		}
+		om, ok := r[0].(*jsonic.OrderedMap)
+		if !ok {
+			t.Fatalf("%s: a record is %T, want *jsonic.OrderedMap", c.name, r[0])
+		}
+		if !reflect.DeepEqual(om.Keys, c.keys) {
+			t.Errorf("%s: keys %q, want %q", c.name, om.Keys, c.keys)
+		}
+		got, err := json.Marshal(r)
+		if err != nil {
+			t.Fatalf("%s: marshal: %v", c.name, err)
+		}
+		if string(got) != c.json {
+			t.Errorf("%s: json.Marshal\n got %s\nwant %s", c.name, got, c.json)
+		}
 	}
-	m := r[0].(map[string]any)
-	if m["name"] != "Alice" || m["age"] != "30" {
-		t.Errorf("got %v", m)
+
+	// A streamed record is the same ordered record.
+	var streamed []any
+	j := jsonic.Make()
+	j.UseDefaults(Csv, Defaults, map[string]any{
+		"stream": func(what string, record any) {
+			if what == "record" {
+				streamed = append(streamed, record)
+			}
+		},
+	})
+	if _, err := j.Parse("name,age,city\nAda,36,Paris"); err != nil {
+		t.Fatalf("stream: parse: %v", err)
+	}
+	if len(streamed) != 1 {
+		t.Fatalf("stream: %d records, want 1", len(streamed))
+	}
+	om, ok := streamed[0].(*jsonic.OrderedMap)
+	if !ok {
+		t.Fatalf("stream: a record is %T, want *jsonic.OrderedMap", streamed[0])
+	}
+	if want := []string{"name", "age", "city"}; !reflect.DeepEqual(om.Keys, want) {
+		t.Errorf("stream: keys %q, want %q", om.Keys, want)
 	}
 }
 
@@ -798,8 +855,14 @@ func assertField(t *testing.T, name string, result []any, key string, expected s
 	}
 }
 
+// toMap reads a record's values by name. A record is a *jsonic.OrderedMap,
+// whose Vals map holds them; its order is TestRecordsKeepTheHeaderOrder's
+// business, not this helper's.
 func toMap(v any) map[string]any {
-	if m, ok := v.(map[string]any); ok {
+	switch m := v.(type) {
+	case *jsonic.OrderedMap:
+		return m.Vals
+	case map[string]any:
 		return m
 	}
 	return nil

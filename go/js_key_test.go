@@ -34,13 +34,25 @@ func TestHeaderCellsAreNamedAsJavaScriptNamesThem(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%q: %v", c.src, err)
 		}
-		// Marshal sorts an object's keys, so this compares the SET of
+		// byName sorts an object's keys, so this compares the SET of
 		// names and their values, which is what the defect destroyed.
-		got, _ := json.Marshal(result)
-		if string(got) != c.expected {
+		got := byName(result)
+		if got != c.expected {
 			t.Errorf("%q\n got %s\nwant %s", c.src, got, c.expected)
 		}
 	}
+}
+
+// byName renders a parse result as JSON with every object's keys sorted,
+// so a comparison sees the names a record has and their values, which is
+// what the tests in this file are about. A record keeps its header order,
+// which TestRecordsKeepTheHeaderOrder pins; sorting sets that aside, as
+// json.Marshal did for these expectations while a record was a
+// map[string]any. It also sets aside where an integer-like name goes,
+// which a JavaScript object decides for itself (ADR-15).
+func byName(v any) string {
+	b, _ := json.Marshal(jsonic.Plainify(v))
+	return string(b)
 }
 
 // jsNumberToString is ECMAScript Number::toString with radix 10. The
@@ -416,8 +428,8 @@ func TestFieldNamesKeepsEveryElementWhateverItsType(t *testing.T) {
 			t.Errorf("names %#v: refused with %v", c.names, err)
 			continue
 		}
-		got, _ := json.Marshal(result)
-		if string(got) != c.expected {
+		got := byName(result)
+		if got != c.expected {
 			t.Errorf("names %#v\n got %s\nwant %s", c.names, got, c.expected)
 		}
 	}
@@ -580,8 +592,8 @@ func TestAnArrayOptionValueNamesTheColumnWhateverGoSliceItIs(t *testing.T) {
 			t.Errorf("field.empty %s: refused with %v, want %s", c.name, err, c.expected)
 			continue
 		}
-		got, _ := json.Marshal(result)
-		if string(got) != c.expected {
+		got := byName(result)
+		if got != c.expected {
 			t.Errorf("field.empty %s\n got %s\nwant %s", c.name, got, c.expected)
 		}
 	}
@@ -614,8 +626,8 @@ func TestAnArrayOptionValueNamesTheColumnWhateverGoSliceItIs(t *testing.T) {
 	if err != nil {
 		t.Fatalf(`field.empty "ab": %v`, err)
 	}
-	sgot, _ := json.Marshal(sres)
-	if want := `[{"a":"y","ab":"x"}]`; string(sgot) != want {
+	sgot := byName(sres)
+	if want := `[{"a":"y","ab":"x"}]`; sgot != want {
 		t.Errorf("field.empty \"ab\"\n got %s\nwant %s", sgot, want)
 	}
 }
@@ -983,8 +995,8 @@ func TestADeclaredPrimitiveTypeNamesAColumnAsItsValueDoes(t *testing.T) {
 			t.Errorf("%s: refused with %v, want %s", c.name, err, c.expected)
 			continue
 		}
-		got, _ := json.Marshal(result)
-		if string(got) != c.expected {
+		got := byName(result)
+		if got != c.expected {
 			t.Errorf("%s\n got %s\nwant %s", c.name, got, c.expected)
 		}
 	}
@@ -1088,8 +1100,8 @@ func TestASelfReferentialOptionValueIsRefusedWhereTheOptionsAreRead(t *testing.T
 			t.Errorf("%s: %v", c.name, err)
 			continue
 		}
-		got, _ := json.Marshal(result)
-		if string(got) != c.expected {
+		got := byName(result)
+		if got != c.expected {
 			t.Errorf("%s\n got %s\nwant %s", c.name, got, c.expected)
 		}
 	}

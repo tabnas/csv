@@ -379,7 +379,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				}
 
 				if objres {
-					obj := make(map[string]any)
+					// The engine's insertion-ordered map, so a record keeps
+					// its fields in header order, then the unnamed extras in
+					// column order, as the canonical object does (and Rust's
+					// IndexMap). A caller that walks a record sees the
+					// columns as the file wrote them, and json.Marshal writes
+					// them that way. Set keeps a repeated name at its FIRST
+					// column and takes its LAST value, which is what
+					// assigning to a JavaScript object does. A plain
+					// map[string]any has no order to keep, so every caller
+					// got Go's own instead.
+					obj := jsonic.NewOrderedMap()
 					i := 0
 
 					if fields != nil {
@@ -421,7 +431,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 							if fI < len(record) && !jsonic.IsUndefined(record[fI]) {
 								val = record[fI]
 							}
-							obj[name] = val
+							obj.Set(name, val)
 						}
 						i = len(fields)
 					}
@@ -432,7 +442,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 						if jsonic.IsUndefined(val) {
 							val = emptyField
 						}
-						obj[fname] = val
+						obj.Set(fname, val)
 					}
 
 					if stream != nil {
