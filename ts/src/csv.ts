@@ -246,6 +246,17 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
     comment: {
       lex: comment,
     },
+    // A quoted field holds every character but an unescaped quote, the C0
+    // controls included, as other CSV readers accept them: the CSV renderer
+    // writes a cell holding a TAB, an ASCII 30 or an ASCII 31 between
+    // quotes, because CSV has no other spelling for it. The engine's
+    // string matcher, which reads the quote characters the CSV matcher
+    // does not own and every quote under `string.csv: false` or in
+    // non-strict mode, refuses a raw control as `unprintable` unless this
+    // is on, and buildCsvStringMatcher honours the same option.
+    string: {
+      allowControl: true,
+    },
     line: {
       single: record_empty,
       chars:
@@ -659,10 +670,22 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
 
               cI = 1
               s.push(src.substring(bI, sI + 1))
-            } else if (cc < 32) {
-              pnt.sI = sI
-              pnt.cI = cI
-              return lex.bad('unprintable', sI, sI + 1)
+            } else if (cc < 32 && qc !== cc) {
+              // Any other control character is field text when the
+              // engine's `string.allowControl` is on, which the plugin
+              // turns on, so a TAB or an ASCII 30 / 31 written between
+              // quotes reads back as written. It takes a column, as any
+              // other body character does. A quote that is itself a
+              // control character is not one of these: it goes on to
+              // close the field, or to escape itself, as Go and Rust
+              // read it.
+              if (!cfg.string.allowControl) {
+                pnt.sI = sI
+                pnt.cI = cI
+                return lex.bad('unprintable', sI, sI + 1)
+              }
+              cI++
+              s.push(src.substring(bI, sI + 1))
             } else {
               s.push(src.substring(bI, sI))
               sI--

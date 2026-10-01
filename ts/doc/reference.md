@@ -161,6 +161,10 @@ non-default Tabnas instance manually. Most users never need this; the
 `Csv` plugin installs it for you when appropriate (in strict mode, or
 in non-strict mode when `string.csv: true`).
 
+Between the quotes, a control character is text when the instance's
+`string.allowControl` option is on, as the `Csv` plugin sets it, and an
+`unprintable` error with the option off, the engine's default.
+
 ## Grammar and accepted syntax
 
 The plugin parses CSV with the rules in
@@ -189,8 +193,9 @@ Concretely, the plugin accepts:
   `field.empty`.
 - **Quoted fields** (strict mode): a field beginning with `"` (at a
   field boundary) runs to the matching `"`. Inside, `""` is a literal
-  quote, and commas / line breaks / other significant characters are
-  text. The quote character is set by `string.quote`.
+  quote, and every other character is text: commas, line breaks, other
+  significant characters, and the control characters U+0000 to U+001F,
+  a tab among them. The quote character is set by `string.quote`.
 - **Blank lines**: skipped by default; kept as empty records with
   `record.empty: true`. Leading and trailing blank lines are always
   skipped.
@@ -199,6 +204,8 @@ Concretely, the plugin accepts:
 - **Embedded jsonic values** (non-strict mode only): a field body may
   be any jsonic value: `[1,2]`, `{x:1}`, a quoted string with
   backslash escapes, a number, or a keyword.
+  A single or double quoted string there may hold any control
+  character but a line break.
 
 The token legend used by the railroad diagram:
 

@@ -195,6 +195,19 @@ rules so embedded JSON values keep working. Rust does the same through
   a cell can hold `[1,2]`, `{x:1}`, or a backslash-escaped string.
   Non-strict also defaults `trim`, `comment`, `number`, and `value` to on,
   and excludes only `imp`.
+- **A quoted field holds every character but an unescaped quote**, the C0
+  controls (TAB, ASCII 30 and 31, NUL) included, as Go's `encoding/csv`,
+  Python's `csv` and Papa Parse read them and as the CSV renderer writes
+  them (tabnas/csv#82). Every mode sets the engine's `string.allowControl`
+  option, which the jsonic string matcher reads, and the RFC 4180 matcher
+  honours the same option rather than refusing on its own, so the two
+  cannot disagree: `string.csv: false`, a custom `string.quote` and
+  non-strict mode all admit the controls. A raw line break in a jsonic
+  single or double quoted string is still `unprintable`.
+  `test/spec/quoted-control.tsv` pins it, with the documents the renderer
+  writes for four fixtures; `test/spec/quoted-control-nul.tsv` holds the
+  rows with a raw NUL, which `.gitattributes` marks `diff` so git shows
+  the file as text.
 - `#LN` (line end) is removed from the IGNORE token set so row breaks are
   significant; in strict mode `#SP` is also removed so in-field whitespace
   survives.

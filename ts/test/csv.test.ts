@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 import { Tabnas } from '@tabnas/parser'
 import { jsonic } from '@tabnas/jsonic'
-import { Csv } from '../dist/csv'
+import { Csv, buildCsvStringMatcher } from '../dist/csv'
 
 const fixturesDir = join(__dirname, '..', '..', 'test', 'fixtures')
 const manifest = JSON.parse(
@@ -203,6 +203,45 @@ describe('csv', () => {
     assert.deepEqual(j.parse('a\n"""""b"'), [{ a: '""b' }])
     assert.deepEqual(j.parse('a\n"b"""""'), [{ a: 'b""' }])
     assert.deepEqual(j.parse('a\n"""""b"""""'), [{ a: '""b""' }])
+  })
+
+  test('the exported string matcher honours string.allowControl', () => {
+    // A control character between the quotes is field text when the
+    // engine's string.allowControl is on, as the plugin sets it, and
+    // unprintable when it is off, as it is on a plain instance. The
+    // shared rows in test/spec/quoted-control*.tsv cover the plugin.
+    const make = (string: Record<string, any>, quote = '"') => {
+      const defaults = (Csv as any).defaults
+      const tn = new Tabnas().use(jsonic)
+      tn.options({
+        string,
+        lex: {
+          match: {
+            stringcsv: {
+              order: 1e5,
+              make: buildCsvStringMatcher({
+                ...defaults,
+                string: { ...defaults.string, quote },
+              }),
+            },
+          },
+        },
+      })
+      return tn
+    }
+    assert.throws(() => make({}).parse('"a\tb"'), { code: 'unprintable' })
+    assert.throws(() => make({ allowControl: false }).parse('"a\tb"'), {
+      code: 'unprintable',
+    })
+    assert.equal(make({ allowControl: true }).parse('"a\tb""c"'), 'a\tb"c')
+    assert.equal(
+      make({ allowControl: true }).parse('"\u0000\u001e\u001f"'),
+      '\u0000\u001e\u001f',
+    )
+
+    // A quote that is itself a control character closes the field with
+    // the option off too: it is the quote, not field text.
+    assert.equal(make({}, '\u001e').parse('\u001ex y\u001e'), 'x y')
   })
 
   test('trim', async () => {

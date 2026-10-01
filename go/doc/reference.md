@@ -148,8 +148,9 @@ Concretely, the plugin accepts:
   `field.empty`.
 - **Quoted fields** (strict mode): a field beginning with `"` (at a
   field boundary) runs to the matching `"`. Inside, `""` is a literal
-  quote, and commas / line breaks / other significant characters are
-  text. The quote character is set by `string.quote`.
+  quote, and every other character is text: commas, line breaks, other
+  significant characters, and the control characters U+0000 to U+001F,
+  a tab among them. The quote character is set by `string.quote`.
 - **Blank lines**: skipped by default; kept as empty records with
   `record.empty: true`. Leading and trailing blank lines are always
   skipped.
@@ -158,6 +159,8 @@ Concretely, the plugin accepts:
 - **Embedded jsonic values** (non-strict mode only): a field body may
   be any jsonic value: `[1,2]`, `{x:1}`, a quoted string with
   backslash escapes, a number, or a keyword.
+  A single or double quoted string there may hold any control
+  character but a line break.
 
 A railroad/syntax diagram of the live grammar is in
 [`ts/doc/grammar.svg`](../../ts/doc/grammar.svg) (ASCII version:

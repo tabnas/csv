@@ -191,6 +191,17 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		Comment: &jsonic.CommentOptions{
 			Lex: boolPtr(comment),
 		},
+		// A quoted field holds every character but an unescaped quote, the
+		// C0 controls included, as other CSV readers accept them: the CSV
+		// renderer writes a cell holding a TAB, an ASCII 30 or an ASCII 31
+		// between quotes, because CSV has no other spelling for it. The
+		// jsonic string matcher, which reads the quote characters the CSV
+		// matcher does not own and every quote under `string.csv: false` or
+		// in non-strict mode, refuses a raw control as `unprintable` unless
+		// this is on, and BuildCsvStringMatcher honours the same option.
+		String: &jsonic.StringOptions{
+			AllowControl: boolPtr(true),
+		},
 		Line: &jsonic.LineOptions{
 			Single: boolPtr(record_empty),
 		},
@@ -820,7 +831,17 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 					continue
 				}
 				if ch < 32 {
-					return nil
+					if !cfg.AllowControl {
+						return nil
+					}
+					// Any other control character is field text when the
+					// engine's `string.allowControl` is on, which the plugin
+					// turns on, so a TAB or an ASCII 30 / 31 written between
+					// quotes reads back as written. It takes the column the
+					// loop counted for it, as any other body character does.
+					s.WriteByte(ch)
+					sI++
+					continue
 				}
 
 				bI := sI

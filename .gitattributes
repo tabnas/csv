@@ -9,3 +9,8 @@ test/fixtures/*.json binary
 # csv-spectrum's *_crlf.csv files keep their CRLF on every platform and
 # scripts/verify-csv-suites.sh sees exactly the pinned content.
 test/suites/** -text
+
+# A raw NUL sits in an input cell of this fixture (the fixture codec has no
+# escape for one), and git calls any file holding a NUL binary; diff it as
+# text so a change to it can be read.
+test/spec/quoted-control-nul.tsv diff

@@ -991,11 +991,13 @@ fn register_refs(parser: &mut Tabnas, settings: &Settings, quote: &str) {
 ///
 /// The matcher runs only where the engine wants a string token, and only
 /// at the quote character. A line character inside the quotes is field
-/// text (a quoted field may span lines); any other control character is
-/// `unprintable`; a quote left open at the end of the source is
-/// `unterminated_string`. Loop exhaustion is what detects the open quote,
-/// so an odd number of quotes (`"""`, `"""""`) is caught rather than read
-/// as a terminated string.
+/// text (a quoted field may span lines). Any other control character is
+/// field text too when the engine's `string.allowControl` option is on,
+/// as the CSV plugin sets it, and `unprintable` when it is off, as it is
+/// by default on a plain instance. A quote left open at the end of the
+/// source is `unterminated_string`. Loop exhaustion is what detects the
+/// open quote, so an odd number of quotes (`"""`, `"""""`) is caught
+/// rather than read as a terminated string.
 ///
 /// A quote that is not exactly one UTF-16 code unit leaves the matcher
 /// inert, and the factory answers `None` rather than installing one. The
@@ -1023,6 +1025,7 @@ pub fn csv_string_matcher(
         }
         let quote = quote.clone();
         let line_chars: Vec<char> = options.line.chars.chars().collect();
+        let allow_control = options.string.allow_control;
         Some(Arc::new(
             move |lexer: &mut tabnas::Lexer<'_>, _rule: &mut Rule, _context: &mut Context| {
                 let rest = lexer.remaining();
@@ -1052,9 +1055,12 @@ pub fn csv_string_matcher(
                     let character = tail.chars().next().expect("inside the source");
                     if line_chars.contains(&character) {
                         text.push(character);
-                    } else if (character as u32) < 32 {
-                        // The diagnostic points at the control character,
-                        // as it does in TypeScript.
+                    } else if (character as u32) < 32 && !allow_control {
+                        // Any other control character is field text when
+                        // the engine's `string.allowControl` is on, which
+                        // the plugin turns on; only with it off is the
+                        // character refused. The diagnostic points at the
+                        // control character, as it does in TypeScript.
                         lexer.advance_chars(rest[..at].chars().count());
                         return Some(lexer.bad("unprintable"));
                     } else {
@@ -1180,6 +1186,16 @@ fn options_document(
             "number": { "lex": flags.number },
             "value": { "lex": flags.value },
             "comment": { "lex": flags.comment },
+            // A quoted field holds every character but an unescaped quote,
+            // the C0 controls included, as other CSV readers accept them:
+            // the CSV renderer writes a cell holding a TAB, an ASCII 30 or
+            // an ASCII 31 between quotes, because CSV has no other spelling
+            // for it. The jsonic string matcher, which reads the quote
+            // characters the CSV matcher does not own and every quote under
+            // `string.csv: false` or in non-strict mode, refuses a raw
+            // control as `unprintable` unless this is on, and
+            // `csv_string_matcher` honours the same option.
+            "string": { "allowControl": true },
             "line": line,
         },
     });
