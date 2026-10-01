@@ -33,6 +33,13 @@ result, _ := j.Parse("name,age\nAlice,30\nBob,25")
 `UseDefaults` merges any extra `map[string]any` arguments on top of
 `tabnascsv.Defaults`, so you only specify what differs from the default.
 
+`tabnascsv.Make(options)` does both steps in one call and returns the
+instance, or the plugin's error:
+
+```go
+j, err := tabnascsv.Make(map[string]any{"object": false})
+```
+
 ## Documentation
 
 Full documentation, in the four [Diátaxis](https://diataxis.fr)

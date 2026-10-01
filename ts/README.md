@@ -39,6 +39,14 @@ const parse = new Tabnas().use(jsonic).use(Csv)
 parse.parse('name,age\nAlice,30\nBob,25') // => [{ name: 'Alice', age: '30' }, { name: 'Bob', age: '25' }]
 ```
 
+`make(options)` does the same in one call, taking the plugin's options:
+
+```js
+import { make } from '@tabnas/csv'
+
+make({ object: false }).parse('a,b\n1,2') // => [['1', '2']]
+```
+
 
 ## Documentation
 

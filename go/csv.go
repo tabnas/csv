@@ -895,6 +895,44 @@ var Defaults = map[string]any{
 	},
 }
 
+// Make builds a CSV parser instance: a jsonic engine with this plugin
+// installed and configured with options, the counterpart of TS
+// make(options) and Rust make_with(CsvOptions). It is exactly
+//
+//	j := jsonic.Make()
+//	err := j.UseDefaults(Csv, Defaults, options)
+//
+// so the Make path and the plugin path cannot drift: there is one plugin,
+// and this is only a way to call it. The option keys are the plugin's own
+// (see Defaults). More than one map is merged in order, a later key
+// winning, the way UseDefaults merges one over Defaults.
+//
+// It returns an error rather than panicking, unlike a Make that takes
+// only engine options, because the options here are the caller's data
+// and the plugin refuses some of them (see ErrCyclicOption).
+func Make(options ...map[string]any) (*jsonic.Jsonic, error) {
+	j := jsonic.Make()
+	var err error
+	switch len(options) {
+	case 0:
+		err = j.UseDefaults(Csv, Defaults)
+	case 1:
+		err = j.UseDefaults(Csv, Defaults, options[0])
+	default:
+		merged := map[string]any{}
+		for _, o := range options {
+			if o != nil {
+				merged = jsonic.Deep(merged, o).(map[string]any)
+			}
+		}
+		err = j.UseDefaults(Csv, Defaults, merged)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
 // parseGrammarText parses grammar text and builds a GrammarSpec with Ref support.
 func parseGrammarText(text string, refs map[jsonic.FuncRef]any) (*jsonic.GrammarSpec, error) {
 	parsed, err := jsonic.Make().Parse(text)
