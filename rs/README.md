@@ -6,7 +6,8 @@ The CSV grammar plugin for the
 
 CSV text becomes an array of objects, one per row and keyed by the header
 row, or an array of arrays. Quoting follows RFC 4180 (`""` escapes an
-embedded quote, a quoted field may hold the separator or a line break),
+embedded quote, a quoted field may hold the separator, a line break, or
+a control character such as a tab),
 the field and record separators are configurable, records can be streamed
 as they are parsed, and a non-strict mode lets a field body hold embedded
 jsonic (`[1,2]`, `{x:1}`). The plugin is not standalone: it layers on the

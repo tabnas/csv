@@ -95,6 +95,11 @@ RFC 4180:
 - A literal `"` inside the field is written `""`.
 - The quoted body may contain commas, line breaks, and any other
   character that would otherwise be significant.
+- The quoted body may also hold a tab or any other control character
+  from U+0000 to U+001F. The specification's own grammar leaves those
+  out, but a value holding one has no other spelling, so a CSV writer
+  puts it between quotes, and other readers (Go's `encoding/csv`,
+  Python's `csv` module, Papa Parse) read it back as written.
 
 So `"a""b"` lexes to the value `a"b`, and a multi-line quoted field is
 one record's worth of one field. The quote character can be changed via
@@ -107,6 +112,14 @@ takes every field opening with `string.quote`, and jsonic's reads the
 quote characters it does not own, so `'x y'` is still the string `x y`
 in a strict document. In non-strict mode there is no CSV lexer unless you
 force it with `string.csv: true`, and jsonic's handles every quote.
+
+A control character comes through whichever lexer reads the field. The
+plugin turns on the engine's `String.AllowControl` option, which
+jsonic's string lexer reads and the CSV lexer honours, so a tab between
+quotes is text under `string.csv: false`, under a custom `string.quote`,
+and in non-strict mode too. A line break inside a jsonic string is still
+an error, because jsonic's single and double quoted strings hold one
+line.
 
 ## Object output
 

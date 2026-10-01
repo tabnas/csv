@@ -82,3 +82,57 @@ fn a_degenerate_quote_leaves_the_matcher_out() {
         );
     }
 }
+
+/// A control character between the quotes is field text when the engine's
+/// `string.allowControl` is on, as the CSV plugin sets it, and
+/// `unprintable` when it is off, as it is on a plain instance. The shared
+/// rows in `../test/spec/quoted-control*.tsv` cover the plugin. With the
+/// option on, `"a\tb""c"` reads through the doubled quote, which only this
+/// matcher does: the jsonic one would stop at it.
+#[test]
+fn the_string_matcher_honours_allow_control() {
+    let make_quoted = |string: serde_json::Value, quote: &str| {
+        let mut parser = tabnas_jsonic::make();
+        parser.lex_match_factory_ref("@csv-string", tabnas_csv::csv_string_matcher(quote));
+        let spec = GrammarSpec::from_value(serde_json::json!({
+            "options": {
+                "string": string,
+                "lex": { "match": {
+                    "stringcsv": { "order": 100000, "make": "@csv-string" },
+                } },
+            },
+        }))
+        .expect("the options document is valid");
+        parser.grammar(&spec).expect("the options apply");
+        parser
+    };
+    let make = |string: serde_json::Value| make_quoted(string, "\"");
+
+    // A quote that is itself a control character closes the field with
+    // the option off too: it is the quote, not field text.
+    let value = make_quoted(serde_json::json!({}), "\u{1e}")
+        .parse("\u{1e}x y\u{1e}")
+        .expect("a control-character quote opens and closes the field");
+    assert_eq!(value, tabnas::Value::String("x y".to_string()));
+
+    for string in [
+        serde_json::json!({}),
+        serde_json::json!({ "allowControl": false }),
+    ] {
+        let error = make(string.clone())
+            .parse("\"a\tb\"")
+            .expect_err("a raw TAB is refused with allowControl off");
+        assert_eq!(error.code, "unprintable", "under {string}");
+    }
+
+    let on = serde_json::json!({ "allowControl": true });
+    for (src, want) in [
+        ("\"a\tb\"\"c\"", "a\tb\"c"),
+        ("\"\u{0}\u{1e}\u{1f}\"", "\u{0}\u{1e}\u{1f}"),
+    ] {
+        let value = make(on.clone())
+            .parse(src)
+            .unwrap_or_else(|error| panic!("{src:?} with allowControl on: {error}"));
+        assert_eq!(value, tabnas::Value::String(want.to_string()), "{src:?}");
+    }
+}

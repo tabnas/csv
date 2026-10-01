@@ -108,14 +108,17 @@ assignments through another rule:
 ## The string matcher
 
 `csv_string_matcher` is a `lex_match_factory_ref`: the factory sees the
-resolved options (`line.chars` decides which control characters are
-field text) and returns an imperative matcher. Order `1e5` puts it ahead
-of every engine band, exactly where TypeScript and Go register it. It
-matches only at the quote, and the engine only offers it a slot where
-`#ST` is wanted. A control character below 32 that is not a line
-character is `unprintable`; an open quote at end of source is
-`unterminated_string`, detected by loop exhaustion so an odd run of
-quotes cannot pass as terminated.
+resolved options (`line.chars` and `string.allow_control` decide which
+control characters are field text) and returns an imperative matcher.
+Order `1e5` puts it ahead of every engine band, exactly where TypeScript
+and Go register it. It matches only at the quote, and the engine only
+offers it a slot where `#ST` is wanted. A control character below 32
+that is not a line character is field text when `string.allow_control`
+is on, which the options document sets (`"string": {"allowControl":
+true}`) as TypeScript and Go set theirs, and `unprintable` when it is
+off, the engine's default on a plain instance; an open quote at end of
+source is `unterminated_string`, detected by loop exhaustion so an odd
+run of quotes cannot pass as terminated.
 
 The factory answers `None`, installing no matcher at all, for a quote
 that is not exactly one UTF-16 code unit. The canonical tests
