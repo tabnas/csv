@@ -16,6 +16,14 @@ a\n"""""""	ERROR:unterminated_string
 a\n"b	ERROR:unterminated_string
 a\n"b""	ERROR:unterminated_string
 a\n"b""c	ERROR:unterminated_string
+# An unterminated quote is reported where it OPENED, not where the
+# source ran out: the Go port once said 5:3 for the first row here,
+# because its matcher counted the rows it scanned past.
+a,b\n1,2\n3,"x\n4,5\n	ERROR:unterminated_string@3:3
+a,b\n1,2\n3,"x\n4,5	ERROR:unterminated_string@3:3
+a,b\n1,2\n3,"x""y\n4,5\n	ERROR:unterminated_string@3:3
+a,b\r\n1,2\r\n3,"x\r\n4,5\r\n	ERROR:unterminated_string@3:3
+a,b\n1, "x\n	ERROR:unterminated_string@2:4
 a\n""	[{"a":""}]
 a\n""""	[{"a":"\""}]
 a\n""""""	[{"a":"\"\""}]

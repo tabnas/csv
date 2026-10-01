@@ -795,6 +795,11 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 			qLen := len(q)
 			rI := pnt.RI
 			cI := pnt.CI
+			// The row the quote opened on. The loop below moves pnt.RI on
+			// at every row character it passes, so a field that never
+			// closes puts it back before its error token takes a position,
+			// as the canonical does (`pnt.rI = qrI`).
+			qRI := pnt.RI
 			sI += qLen
 			cI += qLen
 
@@ -857,6 +862,11 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 				s.WriteString(src[bI:sI])
 			}
 
+			// Report the error where the quote opened, not where the source
+			// ran out. pnt.SI and pnt.CI still name the quote; only the row
+			// has moved. For `a,b\n1,2\n3,"x\n4,5\n` that is 3:3, as in
+			// TypeScript and Rust, where this port once said 5:3.
+			pnt.RI = qRI
 			badSrc := src[pnt.SI:sI]
 			tkn := lex.Token("#BD", jsonic.TinBD, nil, badSrc)
 			tkn.Why = "unterminated_string"
