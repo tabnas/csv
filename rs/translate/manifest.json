@@ -47,7 +47,8 @@
       "A null and a missing cell are both written as the empty field, so the two cannot be told apart, or from an empty string, when read back.",
       "A nested array or object in a cell is written as its compact JSON text.",
       "Every field is written quoted.",
-      "Records end in CRLF."
+      "Records end in CRLF.",
+      "Every value is written as text, so a number or a boolean reads back as a string."
     ]
   }
 }
