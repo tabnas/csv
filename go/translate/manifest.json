@@ -1,0 +1,54 @@
+{
+  "$schema": "https://tabnas.dev/schema/plugin.schema.json",
+  "name": "@tabnas/csv",
+  "go": "github.com/tabnas/csv/go",
+  "description": "CSV (RFC 4180) parsing for the tabnas engine.",
+  "base": "@tabnas/jsonic",
+  "engine": "@tabnas/parser",
+  "grammar": "csv-grammar.jsonic",
+  "extensions": [
+    ".csv"
+  ],
+  "mediaTypes": [
+    "text/csv"
+  ],
+  "languageId": "csv",
+  "pluginKind": "grammar",
+  "grammarKind": "closure",
+  "lexStream": "clean",
+  "syncGroups": [
+    "end",
+    "comma"
+  ],
+  "specDir": "test/spec",
+  "clib": {
+    "dir": "go/clib",
+    "library": "libtabnascsv",
+    "abi": "v1",
+    "errorCodes": [
+      "usage",
+      "grammar",
+      "handle",
+      "internal"
+    ]
+  },
+  "errorCodes": [
+    "csv_extra_field",
+    "csv_missing_field"
+  ],
+  "docs": "https://tabnas.dev/docs/packages",
+  "repository": "https://github.com/tabnas/csv",
+  "versionSource": "ts/package.json",
+  "translate": {
+    "reads": "tree",
+    "writes": "records",
+    "render": "csv",
+    "loss": [
+      "A null and a missing cell are both written as the empty field, so the two cannot be told apart, or from an empty string, when read back.",
+      "A nested array or object in a cell is written as its compact JSON text.",
+      "Every field is written quoted.",
+      "Records end in CRLF.",
+      "Every value is written as text, so a number or a boolean reads back as a string."
+    ]
+  }
+}

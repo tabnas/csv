@@ -1625,6 +1625,41 @@ pub fn parse(src: &str) -> Result<Value, CsvError> {
     DEFAULT.get_or_init(make).parse(src)
 }
 
+/// One optional alchemy source and the entry point a host calls.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TranslationPart {
+    /// The entry point a host calls.
+    pub entry: &'static str,
+    /// The source text, or `None` for an entry supplied by alchemy.
+    pub source: Option<&'static str>,
+}
+
+/// The package-local structural translation interface.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TranslationParts {
+    /// The complete `tabnas.plugin.json` text.
+    pub manifest: &'static str,
+    /// An optional lift from the grammar's events to its first read shape.
+    pub lift: Option<TranslationPart>,
+    /// An optional render from the write shape to text.
+    pub render: Option<TranslationPart>,
+}
+
+const TRANSLATION: TranslationParts = TranslationParts {
+    manifest: include_str!("../translate/manifest.json"),
+    lift: None,
+    render: Some(TranslationPart {
+        entry: "csv",
+        source: None,
+    }),
+};
+
+/// Return CSV's immutable translation parts.
+#[must_use]
+pub const fn translate() -> Option<TranslationParts> {
+    Some(TRANSLATION)
+}
+
 /// The plugin's manifest, `tabnas.plugin.json`, as the repository carries
 /// it. Its `translate` object is what a host that translates reads: the
 /// shapes CSV is read as (`tree`, one object per record, keyed by the
@@ -1639,5 +1674,5 @@ pub fn parse(src: &str) -> Result<Value, CsvError> {
 /// assert!(tabnas_csv::manifest_text().contains("\"translate\""));
 /// ```
 pub fn manifest_text() -> &'static str {
-    include_str!("../translate/manifest.json")
+    TRANSLATION.manifest
 }
