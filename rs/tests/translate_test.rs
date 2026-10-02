@@ -36,6 +36,16 @@ fn the_manifest_the_crate_embeds_is_the_repositorys() {
     );
 }
 
+#[test]
+fn the_structural_interface_names_the_builtin_render_entry() {
+    let parts = tabnas_csv::translate().expect("CSV carries translation parts");
+    assert_eq!(parts.manifest, tabnas_csv::manifest_text());
+    assert_eq!(parts.lift, None);
+    let render = parts.render.expect("CSV carries a render");
+    assert_eq!(render.entry, "csv");
+    assert_eq!(render.source, None);
+}
+
 /// CSV is read as a tree (one object per record, keyed by the header) and
 /// written from records, through the `csv` render alchemy carries. Its
 /// events carry its records already, so there is no lift, and no render

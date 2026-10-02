@@ -27,7 +27,7 @@
     "test-some": "node --enable-source-maps --test-name-pattern=\"$npm_config_pattern\" --test \"dist-test/*.test.js\"",
     "pretest-watch": "npm run build",
     "test-watch": "node --test --watch dist-test/csv.test.js",
-    "embed": "node embed-grammar.js",
+    "embed": "node embed-grammar.js && node embed-translate.js",
     "watch": "tsc --build src test -w",
     "build": "npm run embed && npm run compile",
     "compile": "tsc --build src && tsc --build test",

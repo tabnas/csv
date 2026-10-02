@@ -762,3 +762,6 @@ function make(options?: CsvMakeOptions): Tabnas {
 export { Csv, make, buildCsvStringMatcher, VERSION }
 
 export type { CsvOptions, CsvMakeOptions }
+
+export { translate } from './translate'
+export type { TranslationPart, TranslationParts } from './translate'
