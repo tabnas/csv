@@ -197,7 +197,7 @@ types, and one known error-code gap.
 | Aspect | TypeScript | Go |
 |---|---|---|
 | Registration | `new Tabnas().use(jsonic).use(Csv, opts?)` | `j := tabnasjsonic.Make(); j.UseDefaults(tabnascsv.Csv, tabnascsv.Defaults, opts...)` |
-| Plugin signature | `(tn, options) => void` | `func(j *tabnasjsonic.Jsonic, options map[string]any) error` |
+| Plugin signature | `(tn, options) => void` | `func(j *tabnas.Tabnas, options map[string]any) error` |
 | Options | partial `CsvOptions` object | `map[string]any` merged over `tabnascsv.Defaults` |
 | Defaults | attached as `Csv.defaults` | exported as `tabnascsv.Defaults`, passed explicitly |
 | Parse call | `parse.parse(src)` returns the value | `j.Parse(src)` returns `(any, error)` |

@@ -80,7 +80,7 @@ There are three implementations that must behave identically — TypeScript
 | Path | What it is |
 |---|---|
 | [`ts/`](ts/) | **Canonical** TypeScript implementation — the `@tabnas/csv` package. Plugin in `src/csv.ts`, which also exports `make(options)` (`new Tabnas().use(jsonic).use(Csv, options)` in one call). Imports the engine as `@tabnas/parser` and the base grammar as `@tabnas/jsonic`. |
-| [`go/`](go/) | Go port — `github.com/tabnas/csv/go`. Plugin in `csv.go`, which also exports `Make(options...)` (`jsonic.Make()` + `UseDefaults(Csv, Defaults, options)`, returning the plugin's error). Depends on `github.com/tabnas/jsonic/go` (jsonic re-exports the engine API in Go). |
+| [`go/`](go/) | Go port — `github.com/tabnas/csv/go`. Plugin in `csv.go`, which also exports `Make(options...)` (`jsonic.Make()` + `UseDefaults(Csv, Defaults, options)`, returning the plugin's error). Requires `github.com/tabnas/parser/go`, imported as `tabnas` for the engine's types, and `github.com/tabnas/jsonic/go` for jsonic's own `jsonic.Make`, which builds the base engine and reads the grammar text. |
 | [`rs/`](rs/) | Rust port: the `tabnas-csv` crate (library `tabnas_csv`). Plugin in `src/lib.rs`, a grammar plugin for the Rust `tabnas` engine over the `tabnas-jsonic` base, mirroring the same split. Supplies `csv` / `plugin()` / `plugin_with()` (the engine plugin), `CsvOptions`, `csv_string_matcher`, and `make` / `make_with` / `parse`. Depends on sibling `tabnas/parser`, `tabnas/jsonic` (which brings `tabnas/json`) and (tests only) `tabnas/support` checkouts via Cargo `path` dependencies. `rs/AGENTS.md` has the crate-specific hazards. |
 | [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, **source of truth for every runtime**. Embedded verbatim into all three source files. Lives at the repo root — `ts/embed-grammar.js` reads `../csv-grammar.jsonic`. |
 | [`tabnas.plugin.json`](tabnas.plugin.json) | Machine-readable plugin descriptor — name, base, grammar, extensions, error codes. Consumed by agent tooling. It deliberately carries **no version**: `versionSource` names `ts/package.json` instead, so this file cannot become a fourth place for the version to drift. Keep `errorCodes` in step with `options: error:` in the grammar. It also carries the format's **translation part**: the `translate` object says CSV reads as a tree (one object per record, keyed by the header) and writes from records through the `csv` render [alchemy](https://github.com/tabnas/alchemy) carries, and its `loss` lines, which a host prints verbatim, say what that render changes. The Rust crate embeds a byte-identical copy, `rs/translate/manifest.json`, as `manifest_text()`, and `rs/tests/translate_test.rs` holds the copy to the file: change the manifest at the root, then copy it there. |
@@ -106,11 +106,12 @@ publish tagged releases):
   local builds. `@tabnas/debug` and `@tabnas/railroad` are dev-only
   `file:` devDependencies (debug for the `debug.model()` test, railroad
   to regenerate `ts/doc/grammar.{svg,txt}`).
-- Go: `go/go.mod` requires `github.com/tabnas/jsonic/go` with
-  `replace github.com/tabnas/jsonic/go => ../../jsonic/go`. That is the
-  module's **only** tabnas dependency — the Go jsonic package re-exports
-  the engine types (`jsonic.Make`, `jsonic.Options`, `jsonic.Rule`, …),
-  so `csv.go` imports `jsonic`, not `parser`, directly.
+- Go: `go/go.mod` requires `github.com/tabnas/jsonic/go`,
+  `github.com/tabnas/parser/go` and `github.com/tabnas/support/go`, with
+  `github.com/tabnas/json/go` indirect, and carries no `replace`.
+  `csv.go` imports the engine as `tabnas` for the engine's types
+  (`tabnas.Tabnas`, `tabnas.Rule`, `tabnas.Options`, …), and `jsonic`
+  only for jsonic's own `jsonic.Make`.
 - Rust: `rs/Cargo.toml` takes `tabnas = { package = "tabnas-parser", path = "../../parser/rs" }`,
   `tabnas-jsonic = { path = "../../jsonic/rs" }` (which itself takes
   `tabnas-json = { path = "../../json/rs" }`) and, as a dev-dependency,
