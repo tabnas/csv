@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	jsonic "github.com/tabnas/jsonic/go"
+	tabnas "github.com/tabnas/parser/go"
 )
 
 // VERSION is this module's version. It MUST equal ts/package.json
@@ -93,7 +94,7 @@ const grammarText = `
 
 // Csv is a jsonic plugin that adds CSV parsing support.
 // Options are pre-merged with Defaults by jsonic.UseDefaults.
-func Csv(j *jsonic.Jsonic, options map[string]any) error {
+func Csv(j *tabnas.Tabnas, options map[string]any) error {
 	// Guard against re-invocation: Use() re-runs plugins on SetOptions calls.
 	if j.Decoration("csv-init") != nil {
 		return nil
@@ -145,18 +146,18 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	// runtimes to the canonical answer. Do not reinstate it.
 	if strict {
 		if !isFalse(stringOpts["csv"]) {
-			j.SetOptions(jsonic.Options{Lex: &jsonic.LexOptions{
-				Match: map[string]*jsonic.MatchSpec{
+			j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{
+				Match: map[string]*tabnas.MatchSpec{
 					"stringcsv": {Order: 1e5, Make: BuildCsvStringMatcher(stringOpts)},
 				},
 			}})
 		}
-		j.SetOptions(jsonic.Options{Rule: &jsonic.RuleOptions{Exclude: "jsonic,imp"}})
+		j.SetOptions(tabnas.Options{Rule: &tabnas.RuleOptions{Exclude: "jsonic,imp"}})
 	} else {
 		// Fields may contain Jsonic content.
 		if isTrue(stringOpts["csv"]) {
-			j.SetOptions(jsonic.Options{Lex: &jsonic.LexOptions{
-				Match: map[string]*jsonic.MatchSpec{
+			j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{
+				Match: map[string]*tabnas.MatchSpec{
 					"stringcsv": {Order: 1e5, Make: BuildCsvStringMatcher(stringOpts)},
 				},
 			}})
@@ -173,7 +174,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		if options["value"] == nil {
 			opt_value = true
 		}
-		j.SetOptions(jsonic.Options{Rule: &jsonic.RuleOptions{Exclude: "imp"}})
+		j.SetOptions(tabnas.Options{Rule: &tabnas.RuleOptions{Exclude: "imp"}})
 	}
 
 	fieldSep := toString(fieldOpts["separation"])
@@ -181,14 +182,14 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 
 	// Jsonic option overrides (matching TS jsonicOptions). Static options
 	// (rule.start, lex.emptyResult, error, hint) live in csv-grammar.jsonic.
-	jsonicOptions := jsonic.Options{
-		Number: &jsonic.NumberOptions{
+	jsonicOptions := tabnas.Options{
+		Number: &tabnas.NumberOptions{
 			Lex: boolPtr(opt_number),
 		},
-		Value: &jsonic.ValueOptions{
+		Value: &tabnas.ValueOptions{
 			Lex: boolPtr(opt_value),
 		},
-		Comment: &jsonic.CommentOptions{
+		Comment: &tabnas.CommentOptions{
 			Lex: boolPtr(comment),
 		},
 		// A quoted field holds every character but an unescaped quote, the
@@ -199,10 +200,10 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		// matcher does not own and every quote under `string.csv: false` or
 		// in non-strict mode, refuses a raw control as `unprintable` unless
 		// this is on, and BuildCsvStringMatcher honours the same option.
-		String: &jsonic.StringOptions{
+		String: &tabnas.StringOptions{
 			AllowControl: boolPtr(true),
 		},
-		Line: &jsonic.LineOptions{
+		Line: &tabnas.LineOptions{
 			Single: boolPtr(record_empty),
 		},
 	}
@@ -215,7 +216,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	// Fixed-token overrides: in strict mode disable JSON structural tokens
 	// and the ':' key separator; swap the field separator when configured.
 	if strict || fieldSep != "" {
-		jsonicOptions.Fixed = &jsonic.FixedOptions{Token: map[string]*string{}}
+		jsonicOptions.Fixed = &tabnas.FixedOptions{Token: map[string]*string{}}
 		if strict {
 			jsonicOptions.Fixed.Token["#OB"] = nil
 			jsonicOptions.Fixed.Token["#CB"] = nil
@@ -291,9 +292,9 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	// keeps a non-nil zero-length slice.
 	fieldNames, _ := asSlice(fieldOpts["names"])
 
-	refs := map[jsonic.FuncRef]any{
+	refs := map[tabnas.FuncRef]any{
 
-		"@csv-bo": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@csv-bo": tabnas.StateAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 			if ctx.Meta == nil {
 				ctx.Meta = make(map[string]any)
 			}
@@ -304,13 +305,13 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			r.Node = make([]any, 0)
 		}),
 
-		"@csv-ac": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@csv-ac": tabnas.StateAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 			if stream != nil {
 				stream("end", nil)
 			}
 		}),
 
-		"@record-bc": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@record-bc": tabnas.StateAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 			recordI, _ := ctx.Meta["recordI"].(int)
 			var fields []any
 			if fs, ok := ctx.Meta["fields"].([]any); ok {
@@ -371,8 +372,8 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 					if ctx.T0 != nil {
 						ctx.ParseErr = ctx.T0.Bad(errCode, details)
 					} else {
-						ctx.ParseErr = (&jsonic.Token{
-							Name: "#BD", Tin: jsonic.TinBD,
+						ctx.ParseErr = (&tabnas.Token{
+							Name: "#BD", Tin: tabnas.TinBD,
 						}).Bad(errCode, details)
 					}
 					return
@@ -389,7 +390,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 					// assigning to a JavaScript object does. A plain
 					// map[string]any has no order to keep, so every caller
 					// got Go's own instead.
-					obj := jsonic.NewOrderedMap()
+					obj := tabnas.NewOrderedMap()
 					i := 0
 
 					if fields != nil {
@@ -421,14 +422,14 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 								if ctx.T0 != nil {
 									ctx.ParseErr = ctx.T0.Bad("unexpected", nil)
 								} else {
-									ctx.ParseErr = (&jsonic.Token{
-										Name: "#BD", Tin: jsonic.TinBD,
+									ctx.ParseErr = (&tabnas.Token{
+										Name: "#BD", Tin: tabnas.TinBD,
 									}).Bad("unexpected", nil)
 								}
 								return
 							}
 							var val any = emptyField
-							if fI < len(record) && !jsonic.IsUndefined(record[fI]) {
+							if fI < len(record) && !tabnas.IsUndefined(record[fI]) {
 								val = record[fI]
 							}
 							obj.Set(name, val)
@@ -439,7 +440,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 					for ; i < len(record); i++ {
 						fname := nonameprefix + strconv.Itoa(i)
 						val := record[i]
-						if jsonic.IsUndefined(val) {
+						if tabnas.IsUndefined(val) {
 							val = emptyField
 						}
 						obj.Set(fname, val)
@@ -449,13 +450,13 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 						stream("record", obj)
 					} else if arr, ok := r.Node.([]any); ok {
 						r.Node = append(arr, obj)
-						if r.Parent != jsonic.NoRule && r.Parent != nil {
+						if r.Parent != tabnas.NoRule && r.Parent != nil {
 							r.Parent.Node = r.Node
 						}
 					}
 				} else {
 					for i := range record {
-						if jsonic.IsUndefined(record[i]) {
+						if tabnas.IsUndefined(record[i]) {
 							record[i] = emptyField
 						}
 					}
@@ -463,7 +464,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 						stream("record", record)
 					} else if arr, ok := r.Node.([]any); ok {
 						r.Node = append(arr, record)
-						if r.Parent != jsonic.NoRule && r.Parent != nil {
+						if r.Parent != tabnas.NoRule && r.Parent != nil {
 							r.Parent.Node = r.Node
 						}
 					}
@@ -472,30 +473,30 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			ctx.Meta["recordI"] = recordI + 1
 		}),
 
-		"@text-bc": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
-			if !jsonic.IsUndefined(r.Child.Node) {
+		"@text-bc": tabnas.StateAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
+			if !tabnas.IsUndefined(r.Child.Node) {
 				r.Parent.Node = r.Child.Node
 			} else {
 				r.Parent.Node = r.Node
 			}
 		}),
 
-		"@text-follows": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@text-follows": tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 			prev := ""
-			if r.N["text"] != 1 && r.Prev != nil && r.Prev != jsonic.NoRule {
+			if r.N["text"] != 1 && r.Prev != nil && r.Prev != tabnas.NoRule {
 				prev, _ = r.Prev.Node.(string)
 			}
 			result := prev + tokenStr(r.O0)
 			r.Node = result
 			if r.N["text"] == 1 {
-			} else if r.Prev != nil && r.Prev != jsonic.NoRule {
+			} else if r.Prev != nil && r.Prev != tabnas.NoRule {
 				r.Prev.Node = result
 			}
 		}),
 
-		"@text-leads": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@text-leads": tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 			prev := ""
-			if r.N["text"] != 1 && r.Prev != nil && r.Prev != jsonic.NoRule {
+			if r.N["text"] != 1 && r.Prev != nil && r.Prev != tabnas.NoRule {
 				prev, _ = r.Prev.Node.(string)
 			}
 			sp := ""
@@ -505,14 +506,14 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			result := prev + sp + r.O1.Src
 			r.Node = result
 			if r.N["text"] == 1 {
-			} else if r.Prev != nil && r.Prev != jsonic.NoRule {
+			} else if r.Prev != nil && r.Prev != tabnas.NoRule {
 				r.Prev.Node = result
 			}
 		}),
 
-		"@text-end": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@text-end": tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 			prev := ""
-			if r.N["text"] != 1 && r.Prev != nil && r.Prev != jsonic.NoRule {
+			if r.N["text"] != 1 && r.Prev != nil && r.Prev != tabnas.NoRule {
 				prev, _ = r.Prev.Node.(string)
 			}
 			sp := ""
@@ -522,15 +523,15 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			result := prev + sp
 			r.Node = result
 			if r.N["text"] == 1 {
-			} else if r.Prev != nil && r.Prev != jsonic.NoRule {
+			} else if r.Prev != nil && r.Prev != tabnas.NoRule {
 				r.Prev.Node = result
 			}
 		}),
 
-		"@text-space": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@text-space": tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 			if strict {
 				prev := ""
-				if r.N["text"] != 1 && r.Prev != nil && r.Prev != jsonic.NoRule {
+				if r.N["text"] != 1 && r.Prev != nil && r.Prev != tabnas.NoRule {
 					prev, _ = r.Prev.Node.(string)
 				}
 				sp := ""
@@ -540,24 +541,24 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				result := prev + sp
 				r.Node = result
 				if r.N["text"] == 1 {
-				} else if r.Prev != nil && r.Prev != jsonic.NoRule {
+				} else if r.Prev != nil && r.Prev != tabnas.NoRule {
 					r.Prev.Node = result
 				}
 			}
 		}),
 
-		"@not-record-empty": jsonic.AltCond(func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+		"@not-record-empty": tabnas.AltCond(func(r *tabnas.Rule, ctx *tabnas.Context) bool {
 			return !record_empty
 		}),
 
-		"@record-close-next": func(r *jsonic.Rule, ctx *jsonic.Context) string {
+		"@record-close-next": func(r *tabnas.Rule, ctx *tabnas.Context) string {
 			if record_empty {
 				return "record"
 			}
 			return "newline"
 		},
 
-		"@text-space-push": func(r *jsonic.Rule, ctx *jsonic.Context) string {
+		"@text-space-push": func(r *tabnas.Rule, ctx *tabnas.Context) string {
 			if strict {
 				return ""
 			}
@@ -570,9 +571,9 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	if err != nil {
 		return err
 	}
-	if err := j.Grammar(gs, &jsonic.GrammarSetting{
-		Rule: &jsonic.GrammarSettingRule{
-			Alt: &jsonic.GrammarSettingAlt{G: "csv"},
+	if err := j.Grammar(gs, &tabnas.GrammarSetting{
+		Rule: &tabnas.GrammarSettingRule{
+			Alt: &tabnas.GrammarSettingAlt{G: "csv"},
 		},
 	}); err != nil {
 		return fmt.Errorf("failed to apply csv grammar: %w", err)
@@ -596,56 +597,56 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 		// Strict mode: replace list/elem/val rules entirely.
 		// JSON-syntax tokens are disabled, so the only alternates we need
 		// are the CSV-specific ones.
-		j.Rule("list", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		j.Rule("list", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 			rs.Clear()
-			rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			rs.AddBO(func(r *tabnas.Rule, ctx *tabnas.Context) {
 				r.Node = make([]any, 0)
 			})
 			rs.AddOpen(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1},
-				&jsonic.AltSpec{P: "elem"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1},
+				&tabnas.AltSpec{P: "elem"},
 			)
 			rs.AddClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}, G: "end"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1, G: "end"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{ZZ}}, G: "end"},
 			)
 		})
 
-		j.Rule("elem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		j.Rule("elem", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 			rs.Clear()
 			rs.AddOpen(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}}, B: 1,
-					A: jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}}, B: 1,
+					A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
-							if r.Parent != jsonic.NoRule && r.Parent != nil {
+							if r.Parent != tabnas.NoRule && r.Parent != nil {
 								r.Parent.Node = r.Node
 							}
 						}
 						r.EnsureU()["done"] = true
 					})},
-				&jsonic.AltSpec{P: "val"},
+				&tabnas.AltSpec{P: "val"},
 			)
 			rs.AddClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
-					A: jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
+					A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
-							if r.Parent != jsonic.NoRule && r.Parent != nil {
+							if r.Parent != tabnas.NoRule && r.Parent != nil {
 								r.Parent.Node = r.Node
 							}
 						}
 					})},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}}, R: "elem", G: "comma"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}, G: "end"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}}, R: "elem", G: "comma"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1, G: "end"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{ZZ}}, G: "end"},
 			)
-			rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			rs.AddBC(func(r *tabnas.Rule, ctx *tabnas.Context) {
 				done, _ := r.U["done"].(bool)
-				if !done && !jsonic.IsUndefined(r.Child.Node) {
+				if !done && !tabnas.IsUndefined(r.Child.Node) {
 					if arr, ok := r.Node.([]any); ok {
 						r.Node = append(arr, r.Child.Node)
-						if r.Parent != jsonic.NoRule && r.Parent != nil {
+						if r.Parent != tabnas.NoRule && r.Parent != nil {
 							r.Parent.Node = r.Node
 						}
 					}
@@ -653,22 +654,22 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 			})
 		})
 
-		j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		j.Rule("val", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 			rs.Clear()
-			rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Undefined
+			rs.AddBO(func(r *tabnas.Rule, ctx *tabnas.Context) {
+				r.Node = tabnas.Undefined
 			})
 			rs.AddOpen(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{VAL, {SP}}, B: 2, P: "text"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{SP}}, B: 1, P: "text"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{VAL}},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{VAL, {SP}}, B: 2, P: "text"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{SP}}, B: 1, P: "text"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{VAL}},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1},
 			)
-			rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
-				if jsonic.IsUndefined(r.Node) {
-					if jsonic.IsUndefined(r.Child.Node) {
+			rs.AddBC(func(r *tabnas.Rule, ctx *tabnas.Context) {
+				if tabnas.IsUndefined(r.Node) {
+					if tabnas.IsUndefined(r.Child.Node) {
 						if r.OS == 0 {
-							r.Node = jsonic.Undefined
+							r.Node = tabnas.Undefined
 						} else {
 							r.Node = r.O0.ResolveVal(r, ctx)
 						}
@@ -681,22 +682,22 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 	} else {
 		// Non-strict mode: prepend CSV alternates so default JSON-value
 		// alternates (handling [1,2], {x:1}, etc.) remain available.
-		j.Rule("list", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
-			rs.PrependOpen(&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1})
-			rs.AddOpen(&jsonic.AltSpec{P: "elem"})
+		j.Rule("list", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
+			rs.PrependOpen(&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1})
+			rs.AddOpen(&tabnas.AltSpec{P: "elem"})
 			rs.PrependClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{ZZ}}, G: "end"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1, G: "end"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{ZZ}}, G: "end"},
 			)
 		})
 
-		j.Rule("elem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
-			rs.PrependOpen(&jsonic.AltSpec{
-				S: [][]jsonic.Tin{{CA}}, B: 1,
-				A: jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		j.Rule("elem", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
+			rs.PrependOpen(&tabnas.AltSpec{
+				S: [][]tabnas.Tin{{CA}}, B: 1,
+				A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 					if arr, ok := r.Node.([]any); ok {
 						r.Node = append(arr, emptyField)
-						if r.Parent != jsonic.NoRule && r.Parent != nil {
+						if r.Parent != tabnas.NoRule && r.Parent != nil {
 							r.Parent.Node = r.Node
 						}
 					}
@@ -704,24 +705,24 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 				}),
 			})
 			rs.PrependClose(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
-					A: jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
+					A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
-							if r.Parent != jsonic.NoRule && r.Parent != nil {
+							if r.Parent != tabnas.NoRule && r.Parent != nil {
 								r.Parent.Node = r.Node
 							}
 						}
 					})},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1, G: "end"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1, G: "end"},
 			)
 		})
 
-		j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		j.Rule("val", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 			rs.PrependOpen(
-				&jsonic.AltSpec{S: [][]jsonic.Tin{VAL, {SP}}, B: 2, P: "text"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{SP}}, B: 1, P: "text"},
-				&jsonic.AltSpec{S: [][]jsonic.Tin{{LN}}, B: 1},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{VAL, {SP}}, B: 2, P: "text"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{SP}}, B: 1, P: "text"},
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{LN}}, B: 1},
 			)
 		})
 	}
@@ -733,7 +734,7 @@ func Csv(j *jsonic.Jsonic, options map[string]any) error {
 // It handles "a""b" -> a"b quoting.
 // It mirrors the TS export `buildCsvStringMatcher(options)`, which
 // returns make(cfg, opts) => matcher(lex).
-func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
+func BuildCsvStringMatcher(stringOpts map[string]any) tabnas.MakeLexMatcher {
 	quote := toString(stringOpts["quote"])
 
 	// The canonical opens a quoted field with
@@ -757,8 +758,8 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 	quoteRune, quoteSize := utf8.DecodeRuneInString(quote)
 	singleCodeUnit := 0 < quoteSize && quoteSize == len(quote) && quoteRune <= 0xFFFF
 
-	return func(cfg *jsonic.LexConfig, opts *jsonic.Options) jsonic.LexMatcher {
-		return func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+	return func(cfg *tabnas.LexConfig, opts *tabnas.Options) tabnas.LexMatcher {
+		return func(lex *tabnas.Lex, rule *tabnas.Rule) *tabnas.Token {
 			pnt := lex.Cursor()
 			src := lex.Src
 			sI := pnt.SI
@@ -827,7 +828,7 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 					}
 					val := s.String()
 					ssrc := src[pnt.SI:sI]
-					tkn := lex.Token("#ST", jsonic.TinST, val, ssrc)
+					tkn := lex.Token("#ST", tabnas.TinST, val, ssrc)
 					pnt.SI = sI
 					pnt.RI = rI
 					pnt.CI = cI
@@ -878,7 +879,7 @@ func BuildCsvStringMatcher(stringOpts map[string]any) jsonic.MakeLexMatcher {
 			// TypeScript and Rust, where this port once said 5:3.
 			pnt.RI = qRI
 			badSrc := src[pnt.SI:sI]
-			tkn := lex.Token("#BD", jsonic.TinBD, nil, badSrc)
+			tkn := lex.Token("#BD", tabnas.TinBD, nil, badSrc)
 			tkn.Why = "unterminated_string"
 			pnt.SI = sI
 			pnt.RI = rI
@@ -930,7 +931,7 @@ var Defaults = map[string]any{
 // It returns an error rather than panicking, unlike a Make that takes
 // only engine options, because the options here are the caller's data
 // and the plugin refuses some of them (see ErrCyclicOption).
-func Make(options ...map[string]any) (*jsonic.Jsonic, error) {
+func Make(options ...map[string]any) (*tabnas.Tabnas, error) {
 	j := jsonic.Make()
 	var err error
 	switch len(options) {
@@ -942,7 +943,7 @@ func Make(options ...map[string]any) (*jsonic.Jsonic, error) {
 		merged := map[string]any{}
 		for _, o := range options {
 			if o != nil {
-				merged = jsonic.Deep(merged, o).(map[string]any)
+				merged = tabnas.Deep(merged, o).(map[string]any)
 			}
 		}
 		err = j.UseDefaults(Csv, Defaults, merged)
@@ -954,7 +955,7 @@ func Make(options ...map[string]any) (*jsonic.Jsonic, error) {
 }
 
 // parseGrammarText parses grammar text and builds a GrammarSpec with Ref support.
-func parseGrammarText(text string, refs map[jsonic.FuncRef]any) (*jsonic.GrammarSpec, error) {
+func parseGrammarText(text string, refs map[tabnas.FuncRef]any) (*tabnas.GrammarSpec, error) {
 	parsed, err := jsonic.Make().Parse(text)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse grammar text: %w", err)
@@ -963,7 +964,7 @@ func parseGrammarText(text string, refs map[jsonic.FuncRef]any) (*jsonic.Grammar
 	if !ok {
 		return nil, fmt.Errorf("grammar text did not parse to a map")
 	}
-	gs := &jsonic.GrammarSpec{Ref: refs}
+	gs := &tabnas.GrammarSpec{Ref: refs}
 	if optionsMap, ok := asStringMap(parsedMap["options"]); ok {
 		// The jsonic engine's MapToOptions / ResolveFuncRefs consume
 		// OptionsMap and its nested objects as plain map[string]any, so
@@ -974,13 +975,13 @@ func parseGrammarText(text string, refs map[jsonic.FuncRef]any) (*jsonic.Grammar
 	if !ok {
 		return gs, nil
 	}
-	gs.Rule = make(map[string]*jsonic.GrammarRuleSpec, len(ruleMap))
+	gs.Rule = make(map[string]*tabnas.GrammarRuleSpec, len(ruleMap))
 	for name, rDef := range ruleMap {
 		rd, ok := asStringMap(rDef)
 		if !ok {
 			continue
 		}
-		grs := &jsonic.GrammarRuleSpec{}
+		grs := &tabnas.GrammarRuleSpec{}
 		if openDef, ok := rd["open"]; ok {
 			grs.Open = buildGrammarAlts(openDef)
 		}
@@ -992,19 +993,19 @@ func parseGrammarText(text string, refs map[jsonic.FuncRef]any) (*jsonic.Grammar
 	return gs, nil
 }
 
-func buildGrammarAlts(def any) []*jsonic.GrammarAltSpec {
+func buildGrammarAlts(def any) []*tabnas.GrammarAltSpec {
 	arr, ok := def.([]any)
 	if !ok {
 		return nil
 	}
-	alts := make([]*jsonic.GrammarAltSpec, 0, len(arr))
+	alts := make([]*tabnas.GrammarAltSpec, 0, len(arr))
 	for _, item := range arr {
 		m, ok := asStringMap(item)
 		if !ok {
-			alts = append(alts, &jsonic.GrammarAltSpec{})
+			alts = append(alts, &tabnas.GrammarAltSpec{})
 			continue
 		}
-		ga := &jsonic.GrammarAltSpec{}
+		ga := &tabnas.GrammarAltSpec{}
 		if s, ok := m["s"]; ok {
 			switch sv := s.(type) {
 			case string:
@@ -1032,7 +1033,7 @@ func buildGrammarAlts(def any) []*jsonic.GrammarAltSpec {
 			ga.R = r
 		}
 		if a, ok := m["a"].(string); ok {
-			ga.A = jsonic.FuncRef(a)
+			ga.A = tabnas.FuncRef(a)
 		}
 		if c, ok := m["c"]; ok {
 			switch cv := c.(type) {
@@ -1062,11 +1063,11 @@ func buildGrammarAlts(def any) []*jsonic.GrammarAltSpec {
 	return alts
 }
 
-func tokenStr(t *jsonic.Token) string {
+func tokenStr(t *tabnas.Token) string {
 	if t == nil || t.IsNoToken() {
 		return ""
 	}
-	if t.Tin == jsonic.TinST {
+	if t.Tin == tabnas.TinST {
 		if s, ok := t.Val.(string); ok {
 			return s
 		}
@@ -1075,14 +1076,14 @@ func tokenStr(t *jsonic.Token) string {
 }
 
 // asStringMap returns the underlying key→value map for a parsed object,
-// which may be a *jsonic.OrderedMap (the insertion-ordered parse result) or
+// which may be a *tabnas.OrderedMap (the insertion-ordered parse result) or
 // a plain map[string]any. Grammar consumers look values up by name and do
 // not depend on key order, so exposing the underlying map is sufficient.
 func asStringMap(v any) (map[string]any, bool) {
 	switch m := v.(type) {
-	case *jsonic.OrderedMap:
+	case *tabnas.OrderedMap:
 		return m.Vals, true
-	case jsonic.OrderedMap:
+	case tabnas.OrderedMap:
 		return m.Vals, true
 	case map[string]any:
 		return m, true
@@ -1090,20 +1091,20 @@ func asStringMap(v any) (map[string]any, bool) {
 	return nil, false
 }
 
-// toPlain recursively converts any *jsonic.OrderedMap nodes in a parsed
+// toPlain recursively converts any *tabnas.OrderedMap nodes in a parsed
 // value tree into plain map[string]any (dropping key order). The jsonic
 // engine's grammar-consuming helpers (MapToOptions, ResolveFuncRefs) only
 // recurse through plain maps and slices, so grammar config must be plainified
 // before it is handed back to the engine.
 func toPlain(v any) any {
 	switch val := v.(type) {
-	case *jsonic.OrderedMap:
+	case *tabnas.OrderedMap:
 		out := make(map[string]any, len(val.Keys))
 		for _, k := range val.Keys {
 			out[k] = toPlain(val.Vals[k])
 		}
 		return out
-	case jsonic.OrderedMap:
+	case tabnas.OrderedMap:
 		out := make(map[string]any, len(val.Keys))
 		for _, k := range val.Keys {
 			out[k] = toPlain(val.Vals[k])
@@ -1126,7 +1127,7 @@ func toPlain(v any) any {
 	}
 }
 
-// toPlainMap deep-converts a map that may hold nested *jsonic.OrderedMap
+// toPlainMap deep-converts a map that may hold nested *tabnas.OrderedMap
 // values into a fully-plain map[string]any tree.
 func toPlainMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
@@ -1140,8 +1141,8 @@ func toPlainMap(m map[string]any) map[string]any {
 // identity. It is the provenance record tagOptions builds and jsKey
 // consults, and it exists because the Go TYPE of an object does not say
 // where the object came from: the lexer allocates a parsed object as
-// *jsonic.OrderedMap, but OrderedMap is a PUBLIC type with a public
-// constructor, so `field.empty: jsonic.NewOrderedMap()` is an OPTION
+// *tabnas.OrderedMap, but OrderedMap is a PUBLIC type with a public
+// constructor, so `field.empty: tabnas.NewOrderedMap()` is an OPTION
 // value of exactly the type the lexer builds. An earlier round asserted
 // that `%T` proved provenance and DIVERGENCE.md said so; measured on
 // 2026-09-21, that was wrong, and the option object was refused where
@@ -1149,7 +1150,7 @@ func toPlainMap(m map[string]any) map[string]any {
 //
 // A Go map needs no entry here, because the lexer has no way to build
 // one: there the type IS the provenance.
-type optionObjects map[*jsonic.OrderedMap]struct{}
+type optionObjects map[*tabnas.OrderedMap]struct{}
 
 // optionRef identifies a container by the allocation it refers to, so a
 // value that contains ITSELF is recognised rather than walked forever.
@@ -1211,7 +1212,7 @@ var ErrCyclicOption = fmt.Errorf(
 //
 //   - PROVENANCE. An object is named "[object Object]" when an option
 //     supplied it and refuses the document when the lexer built it, and
-//     both are *jsonic.OrderedMap. See optionObjects.
+//     both are *tabnas.OrderedMap. See optionObjects.
 //   - TERMINATION. A self-referential option value is refused here
 //     rather than walked forever at the name site. See ErrCyclicOption.
 //
@@ -1284,16 +1285,16 @@ func tagOptionValue(val any, objects optionObjects, path map[optionRef]struct{})
 
 // asOrderedMap is the POINTER form alone, which is the only object form
 // whose provenance is in doubt: the lexer allocates one, and so can a
-// caller through the public jsonic.NewOrderedMap. It is what an entry in
+// caller through the public tabnas.NewOrderedMap. It is what an entry in
 // optionObjects is keyed by.
 //
-// The VALUE form, `jsonic.OrderedMap{...}`, is deliberately not here.
+// The VALUE form, `tabnas.OrderedMap{...}`, is deliberately not here.
 // Taking its address copies it to the heap, so it would be a different
 // object every time it was asked for and a tag on it would not carry;
 // and it needs no tag, because the lexer cannot produce one. jsKey
 // answers that form by its type.
-func asOrderedMap(val any) (*jsonic.OrderedMap, bool) {
-	if m, ok := val.(*jsonic.OrderedMap); ok && m != nil {
+func asOrderedMap(val any) (*tabnas.OrderedMap, bool) {
+	if m, ok := val.(*tabnas.OrderedMap); ok && m != nil {
 		return m, true
 	}
 	return nil, false
@@ -1315,12 +1316,12 @@ func asOptionMap(val any) map[string]any {
 		return nil
 	case map[string]any:
 		return m
-	case *jsonic.OrderedMap:
+	case *tabnas.OrderedMap:
 		if m == nil {
 			return nil
 		}
 		return m.Vals
-	case jsonic.OrderedMap:
+	case tabnas.OrderedMap:
 		return m.Vals
 	}
 	rv := reflect.ValueOf(val)
@@ -1466,7 +1467,7 @@ func boolPtr(b bool) *bool {
 // This function is TOLD which is which. It does not read the provenance
 // off the concrete type, which cannot carry it: a Go map is never a
 // parsed cell, but an *OrderedMap can be either, because OrderedMap is
-// public and `jsonic.NewOrderedMap()` is a value a caller can hand to
+// public and `tabnas.NewOrderedMap()` is a value a caller can hand to
 // `field.empty`. normalizeOptions walks the option bag at the point the
 // options are READ and records every object it finds there, and that set
 // is what decides the two routes apart here. Two earlier rounds got this
@@ -1493,9 +1494,9 @@ func jsKey(val any, objects optionObjects) (key string, ok bool) {
 		return "null", true
 	case []any:
 		return jsArrayKey(v, objects)
-	case *jsonic.OrderedMap:
+	case *tabnas.OrderedMap:
 		// An object, and which route it came by is NOT written on it:
-		// OrderedMap is public and `jsonic.NewOrderedMap()` is a value a
+		// OrderedMap is public and `tabnas.NewOrderedMap()` is a value a
 		// caller can put in `field.empty`. So ask the record tagOptions
 		// built where the options were read. An object IN it came from an
 		// option, and the canonical's option merge rebuilds a plain
@@ -1510,7 +1511,7 @@ func jsKey(val any, objects optionObjects) (key string, ok bool) {
 			}
 		}
 		return "", false
-	case jsonic.OrderedMap:
+	case tabnas.OrderedMap:
 		// The VALUE form. The lexer allocates objects and hands out
 		// pointers, so only a caller can write this, and only into an
 		// option. Named as the option route is named. Listed here, ahead
@@ -1694,7 +1695,7 @@ func jsArrayKey(items []any, objects optionObjects) (string, bool) {
 		if 0 < i {
 			joined.WriteByte(',')
 		}
-		if item == nil || jsonic.IsUndefined(item) {
+		if item == nil || tabnas.IsUndefined(item) {
 			continue
 		}
 		part, ok := jsKey(item, objects)

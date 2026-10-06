@@ -8,7 +8,7 @@ background see [concepts](concepts.md).
 ## `Csv` (plugin function)
 
 ```go
-func Csv(j *tabnasjsonic.Jsonic, options map[string]any) error
+func Csv(j *tabnas.Tabnas, options map[string]any) error
 ```
 
 The Jsonic plugin that installs the CSV grammar and options. Register
@@ -18,7 +18,7 @@ is idempotent: re-invoking it on the same instance is a no-op.
 ## `Make`
 
 ```go
-func Make(options ...map[string]any) (*tabnasjsonic.Jsonic, error)
+func Make(options ...map[string]any) (*tabnas.Tabnas, error)
 ```
 
 Returns a new jsonic instance with the CSV plugin installed and
