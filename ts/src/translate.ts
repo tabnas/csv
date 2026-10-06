@@ -19,6 +19,7 @@ const TRANSLATION: TranslationParts = Object.freeze({
   "$schema": "https://tabnas.dev/schema/plugin.schema.json",
   "name": "@tabnas/csv",
   "go": "github.com/tabnas/csv/go",
+  "rust": "tabnas-csv",
   "description": "CSV (RFC 4180) parsing for the tabnas engine.",
   "base": "@tabnas/jsonic",
   "engine": "@tabnas/parser",
