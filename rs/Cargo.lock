@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "tabnas-csv"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "indexmap",
  "serde",
@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "tabnas-json"
-version = "0.5.14"
+version = "0.5.15"
 dependencies = [
  "regex",
  "serde_json",
@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "tabnas-jsonic"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "indexmap",
  "regex",
@@ -193,7 +193,7 @@ dependencies = [
 
 [[package]]
 name = "tabnas-support"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "serde_json",
 ]
