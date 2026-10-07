@@ -1,7 +1,8 @@
 # Agents Guide — shared test data
 
-Everything under `test/` is runtime-neutral: both the TypeScript and the Go
-suite read it, so a change here affects both implementations at once.
+Everything under `test/` is runtime-neutral: the TypeScript, Go and Rust
+suites all read it, so a change here affects all three implementations at
+once.
 
 | Path | What it is |
 |---|---|
@@ -11,7 +12,7 @@ suite read it, so a change here affects both implementations at once.
 
 ## `spec/*.tsv` — format
 
-The format is `@tabnas/support`'s, not this repo's: one loader, in two
+The format is `@tabnas/support`'s, not this repo's: one loader, in three
 languages, shared by every tabnas package. Its
 [reference](https://github.com/tabnas/support/blob/main/doc/reference.md)
 is the authority; the short version is that a fixture is tab-separated,
@@ -61,11 +62,11 @@ was never there.
 ## Rules
 
 - Prefer adding a fixture here over a one-off in-language assertion when a
-  case is expressible as input → output. That is what keeps the two
+  case is expressible as input → output. That is what keeps the three
   runtimes honest against each other.
-- TypeScript is canonical. If the two runtimes disagree, the TS behaviour is
-  the expected value — unless Go has exposed a genuine TS defect, in which
-  case fix TS first and pin the corrected behaviour here.
+- TypeScript is canonical. If the runtimes disagree, the TS behaviour is
+  the expected value — unless a port has exposed a genuine TS defect, in
+  which case fix TS first and pin the corrected behaviour here.
 - A new fixture must pass in EVERY runtime: run `go test ./...` (from `go/`),
   `npm test` (from `ts/`) and `cargo test` (from `rs/`) before considering
   it done.

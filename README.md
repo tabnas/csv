@@ -27,13 +27,9 @@ npm install @tabnas/csv @tabnas/parser @tabnas/jsonic
 go get github.com/tabnas/csv/go
 ```
 
-```toml
-# Rust: sibling checkouts of tabnas/csv, tabnas/jsonic, tabnas/json and
-# tabnas/parser beside your crate; none is published to crates.io
-[dependencies]
-tabnas-csv = { path = "../csv/rs" }
-tabnas-jsonic = { path = "../jsonic/rs" }
-tabnas = { package = "tabnas-parser", path = "../parser/rs" }
+```bash
+# Rust
+cargo add tabnas-csv tabnas-jsonic tabnas-parser
 ```
 
 ## One tiny example
