@@ -138,30 +138,29 @@ from the engine.
 
 ## Install
 
-Neither the engine nor the jsonic base is published to a registry, so
-both are consumed as **sibling checkouts**, the standard tabnas
-development model. Clone `https://github.com/tabnas/parser`,
-`https://github.com/tabnas/json` and `https://github.com/tabnas/jsonic`
-next to this repository and point at them:
+The crate is published on crates.io as `tabnas-csv`, and so are the
+engine, `tabnas-parser`, and the jsonic base, `tabnas-jsonic`:
 
-```toml
-[dependencies]
-tabnas-csv = { path = "../csv/rs" }
-tabnas-jsonic = { path = "../jsonic/rs" }
-tabnas = { package = "tabnas-parser", path = "../parser/rs" }
-serde_json = "1"
+```bash
+cargo add tabnas-csv tabnas-jsonic tabnas-parser serde_json
 ```
 
 All four entries are needed. A crate's dependencies are not passed on to
 its dependents, so `tabnas-csv` alone does not put `tabnas`,
 `tabnas-jsonic` or `serde_json` in your extern prelude, and the examples
 above that name `tabnas::Value`, `tabnas_jsonic::make` or
-`serde_json::json!` would not resolve. Only `CsvError` is re-exported.
+`serde_json::json!` would not resolve. The engine's library is named
+`tabnas` in code. Only `CsvError` is re-exported.
 `serde_json` is declared because the option bag is a `tabnas::Value` and
 `Value::from_json` takes a `serde_json::Value`; a program that uses only
-the `CsvOptions` struct can leave it out. The test suite additionally
-needs `https://github.com/tabnas/support` beside the repository, for the
-shared fixture runner.
+the `CsvOptions` struct can leave it out.
+
+This repository's own `rs/Cargo.toml` names the engine, jsonic and, for
+the test suite's shared fixture runner, `tabnas-support` by path, and
+jsonic takes `tabnas-json` the same way. A build here therefore needs
+`parser`, `jsonic`, `json` and `support` from `https://github.com/tabnas/`
+cloned beside it. The release workflow swaps those paths for crates.io
+versions when it publishes the crate.
 
 ## Differences from the canonical TypeScript
 

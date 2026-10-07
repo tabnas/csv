@@ -139,8 +139,8 @@ behaviour:
    changes — see the embed section below).
 2. Port the same change to `go/csv.go` and `rs/src/lib.rs`.
 3. Add/extend the shared fixture(s) in `test/fixtures/` + `manifest.json`
-   so both runtimes assert the new behaviour. The fixtures are the parity
-   contract; both suites resolve them at `../test/fixtures` (TS:
+   so every runtime asserts the new behaviour. The fixtures are the parity
+   contract; all three suites resolve them at `../test/fixtures` (TS:
    `ts/test/csv.test.ts`; Go: `go/csv_test.go` `fixturesDir()`; Rust:
    `rs/tests/csv_test.rs` `fixtures_dir()`).
 4. Mirror any new unit cases across `ts/test/csv.test.ts`,
@@ -354,7 +354,8 @@ still refuses a non-string element, and `DIVERGENCE.md` carries why.
   both module modes. They are asserted, not merely implied:
   `go/csv_test.go` `TestFieldExact` checks the exact code via
   `assertErrCode`, and `test/spec/field-exact.tsv` pins
-  `ERROR:csv_extra_field` / `ERROR:csv_missing_field` for both runtimes.
+  `ERROR:csv_extra_field` / `ERROR:csv_missing_field` for all three
+  runtimes.
 
 - **A self-referential option value (Go) — the plugin refuses it; the
   engine cannot.** `field.empty` and `field.names` are `any` in Go, so a
@@ -499,7 +500,8 @@ the TS, Go and Rust parts (`make test-rs` alone is the fast Rust loop, and
 `V` into the `const VERSION` in `go/csv.go` and tags `go/vX.Y.Z`, and
 `make version-rs V=x.y.z` rewrites the two Rust version sites
 (`rs/Cargo.toml`, `rs/src/lib.rs`) and the lockfile entry, without
-committing or tagging (the crate is unpublished).
+committing or tagging (the crate reaches crates.io through `release.yml`'s
+`crates` job, from the release tag).
 The TS package version is tracked in `ts/package.json`, and is also
 exported as `VERSION` from `ts/src/csv.ts`. Every constant MUST equal
 `ts/package.json` `"version"`, including `version` in `rs/Cargo.toml`
@@ -611,12 +613,13 @@ The steps, in order:
    suite then passes against unreleased code while appearing to verify the
    published one. Reinstalling is the part that matters.
 
-   One thing a clean install does **not** isolate:
-   `ts/test/doc-examples.test.*` resolves `@tabnas/*` by filesystem path
-   (`const TABNAS = path.join(REPO, '..')`), not through `node_modules`. If
-   unbuilt sibling checkouts sit beside this repo, those blocks fail with
-   `MODULE_NOT_FOUND` no matter what you installed — build the siblings, or
-   verify somewhere they are absent.
+   The doc examples are covered too. `ts/test/doc-examples.test.*`
+   resolves a doc example's `require` through `node_modules` first; only a
+   `@tabnas/*` package that is not installed falls back to the sibling
+   checkout `../<x>/ts` (`const TABNAS = path.join(REPO, '..')`), and
+   `@tabnas/csv` itself to this repository's `ts/`. Every package the
+   tested examples require, `@tabnas/parser` and `@tabnas/jsonic`, is
+   declared in `ts/package.json`, so a clean install supplies them.
 
    `npm test` already compiles here: `ts/package.json` sets `pretest` to
    `npm run build`, which npm runs automatically. No separate build step is
@@ -630,13 +633,17 @@ The steps, in order:
    ```bash
    (
      cd go
-     go mod edit -json | grep -q '"Replace": null' || { echo 'go.mod has a replace'; exit 1; }
+     go mod edit -json | jq -e '.Replace == null' >/dev/null || { echo 'go.mod has a replace'; exit 1; }
      GOWORK=off go test -count=1 ./...
    )
    ```
 
    `-count=1` because shared fixtures live outside the Go module, so a
-   changed corpus does not invalidate the test cache.
+   changed corpus does not invalidate the test cache. The check asks `jq`,
+   not `grep`: current Go leaves the `Replace` key out when there is no
+   replace, where older Go printed `"Replace": null`, and `jq` reads a
+   missing key as null, so the check passes on a clean `go.mod` and fails
+   on a replace either way.
 3. **Merge the bump through a reviewed PR.** That is the house convention —
    `CONTRIBUTING.md` squash-merges PRs and takes the title as the commit
    message — and what `release.yml`'s own header describes. A direct push to

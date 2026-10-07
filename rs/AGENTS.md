@@ -26,8 +26,10 @@ Crate `tabnas-csv`, library `tabnas_csv`. The engine (`tabnas`), the
 jsonic base (`tabnas-jsonic`, which brings `tabnas-json`) and the fixture
 runner (`tabnas-support`, dev only) are **path dependencies on sibling
 checkouts** (`../../parser/rs`, `../../jsonic/rs`, `../../json/rs`,
-`../../support/rs`). None is published, so there is no registry version
-to fall back on.
+`../../support/rs`). All are on crates.io, but the committed manifest
+names them by path alone, so there is no registry version to fall back
+on. When `crates-release.yml` publishes the crate, it rewrites those
+paths into crates.io requirements and drops the dev-only one.
 
 ```bash
 cargo build --all-targets

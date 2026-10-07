@@ -14,9 +14,11 @@ path = "src/lib.rs"
 [dependencies]
 # The engine and the jsonic base grammar are consumed as SIBLING CHECKOUTS,
 # the standard tabnas development model: clone https://github.com/tabnas/parser
-# and https://github.com/tabnas/jsonic next to this repo. Neither crate is
-# published, so there is no registry version to fall back on. jsonic in turn
-# takes https://github.com/tabnas/json the same way.
+# and https://github.com/tabnas/jsonic next to this repo. Both crates are on
+# crates.io, but this committed manifest stays path-only (crates-release.yml
+# rewrites the paths into crates.io requirements when it publishes), so
+# there is no registry version to fall back on. jsonic in turn takes
+# https://github.com/tabnas/json the same way.
 tabnas = { package = "tabnas-parser", path = "../../parser/rs" }
 tabnas-jsonic = { path = "../../jsonic/rs" }
 indexmap = "2"
