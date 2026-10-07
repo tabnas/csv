@@ -96,16 +96,21 @@ There are three implementations that must behave identically — TypeScript
 
 ## The tabnas engine dependency
 
-Every runtime depends on the unpublished `@tabnas` siblings via a
-**sibling checkout** (the standard tabnas dev model until the packages
-publish tagged releases):
+TypeScript and Go resolve published `@tabnas` packages, from the npm
+registry and the Go module proxy, so a sibling checkout is optional local
+wiring there. Only Rust needs one:
 
 - TypeScript: `@tabnas/parser` and `@tabnas/jsonic` are declared as
-  `peerDependencies` (`">=2"`) in `ts/package.json` and mirrored as
-  `file:../../parser/ts` / `file:../../jsonic/ts` devDependencies for
-  local builds. `@tabnas/debug` and `@tabnas/railroad` are dev-only
-  `file:` devDependencies (debug for the `debug.model()` test, railroad
-  to regenerate `ts/doc/grammar.{svg,txt}`).
+  `peerDependencies` (`">=0"`) in `ts/package.json` and mirrored as
+  `"*"` devDependencies for local builds (npm >=7 / Node >=24
+  auto-installs peers; `engines.node` is `">=24"`). `@tabnas/debug`,
+  `@tabnas/railroad` and `@tabnas/support` are dev-only `"*"`
+  devDependencies (debug for the `debug.model()` test, railroad to
+  regenerate `ts/doc/grammar.{svg,txt}`, support for the shared fixture
+  runner `parity.test.ts` uses). None is a `file:` path: each resolves
+  to whatever the install leaves in `ts/node_modules/@tabnas/`, a
+  symlink to the sibling checkout where admin's `scripts/link.sh` wired
+  one, the registry copy otherwise.
 - Go: `go/go.mod` requires `github.com/tabnas/jsonic/go`,
   `github.com/tabnas/parser/go` and `github.com/tabnas/support/go`, with
   `github.com/tabnas/json/go` indirect, and carries no `replace`.
@@ -121,9 +126,9 @@ publish tagged releases):
   holds it to the manifest, exempting only the siblings' own version
   entries.
 
-Clone the siblings (`parser`, `jsonic`, plus `debug`/`railroad` for the
-optional tests) next to this repo and build their TS first. CI does this
-for you (see below).
+Only the Rust side needs sibling checkouts: clone `parser`, `jsonic`,
+`json` and `support` next to this repo. CI clones the siblings it builds
+against and links them over the registry copies (see below).
 
 ## Authority and alignment rules
 
@@ -467,7 +472,7 @@ still refuses a non-string element, and `DIVERGENCE.md` carries why.
 TypeScript (from `ts/`):
 
 ```bash
-npm install            # auto-installs peers; resolves file: siblings
+npm install            # auto-installs peers; resolves the @tabnas devDependencies from the registry
 npm run build          # embeds grammar, then tsc --build src test
 npm test               # node --test over dist-test/*.test.js
 ```
@@ -502,9 +507,10 @@ and `pub const VERSION` in `rs/src/lib.rs`: `go/version_test.go`,
 `ts/test/version.test.ts` and `rs/tests/version_test.rs` fail the build
 if any of them drift.
 
-Local builds resolve the unpublished siblings via the repo-set
-`go.work` + node_modules symlinks created by `admin/scripts/link.sh`;
-there is no checked-in `go.work` in this repo.
+Local builds resolve the published siblings unless
+`admin/scripts/link.sh` has wired in the checkouts, through the repo-set
+`go.work` and the `ts/node_modules/@tabnas/*` symlinks; there is no
+checked-in `go.work` in this repo.
 
 ## Verify your work
 
@@ -840,7 +846,7 @@ set (`csv`, `record`, `text`, `newline` plus the shared jsonic
 `config.start`, not `m.start`), that `Csv` is in `m.plugins`, and that
 `csv` pushes `newline`/`record` while `record` pushes `list`. It resolves
 debug dynamically and **skips** unless `@tabnas/debug` is installed (it is
-a `file:` devDependency, so `npm test` runs it) or `TABNAS_DEBUG_PATH`
+a `"*"` devDependency, so `npm test` runs it) or `TABNAS_DEBUG_PATH`
 points at a built sibling.
 
 `ts/test/doc-examples.test.ts` extracts fenced `js` blocks containing
