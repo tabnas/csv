@@ -1641,6 +1641,8 @@ pub struct TranslationParts {
     pub manifest: &'static str,
     /// An optional lift from the grammar's events to its first read shape.
     pub lift: Option<TranslationPart>,
+    /// An optional embedding of a plain tree in the format's schema, with its reverse.
+    pub embed: Option<TranslationPart>,
     /// An optional render from the write shape to text.
     pub render: Option<TranslationPart>,
 }
@@ -1648,6 +1650,7 @@ pub struct TranslationParts {
 const TRANSLATION: TranslationParts = TranslationParts {
     manifest: include_str!("../translate/manifest.json"),
     lift: None,
+    embed: None,
     render: Some(TranslationPart {
         entry: "csv",
         source: None,
@@ -1663,12 +1666,12 @@ pub const fn translate() -> Option<TranslationParts> {
 /// The plugin's manifest, `tabnas.plugin.json`, as the repository carries
 /// it. Its `translate` object is what a host that translates reads: the
 /// shapes CSV is read as (`tree`, one object per record, keyed by the
-/// header) and written from (`records`), the render that writes it, which
-/// is the `csv` render alchemy carries rather than a file of this
-/// repository's, and the sentences that say what that render changes. The
-/// crate embeds its own copy, `translate/manifest.json`, since a packaged
-/// crate holds nothing outside `rs/`; `tests/translate_test.rs` holds the
-/// copy to the file.
+/// header) and written from (`records`), the root whose elements are the
+/// rows (`array`), the render that writes it, which is the `csv` render
+/// alchemy carries rather than a file of this repository's, and the
+/// sentences that say what that render changes. The crate embeds its own
+/// copy, `translate/manifest.json`, since a packaged crate holds nothing
+/// outside `rs/`; `tests/translate_test.rs` holds the copy to the file.
 ///
 /// ```
 /// assert!(tabnas_csv::manifest_text().contains("\"translate\""));

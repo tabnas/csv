@@ -43,10 +43,15 @@
   "translate": {
     "reads": "tree",
     "writes": "records",
+    "root": "array",
     "render": "csv",
     "loss": [
+      "The rows are the elements of the root array, and a root of another kind is written as one row.",
+      "The columns are the first row's, an object's keys or an array's positions labelled 0, 1 and so on, so a member or position of a later row that the first row lacks is not written, and one the first row has and a later row lacks is an empty field.",
+      "When the first row is a scalar there is one column, named value, and every row is written whole in it, an array or an object as its compact JSON text.",
       "A null and a missing cell are both written as the empty field, so the two cannot be told apart, or from an empty string, when read back.",
       "A nested array or object in a cell is written as its compact JSON text.",
+      "A number that is not finite is written as Infinity, -Infinity or NaN, and as null inside a nested array or object, since JSON has no spelling for one.",
       "Every field is written quoted.",
       "Records end in CRLF.",
       "Every value is written as text, so a number or a boolean reads back as a string."
