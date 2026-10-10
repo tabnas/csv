@@ -17,8 +17,8 @@ what is specific to this crate.
 | `tests/perf_test.rs` | instance reuse beats rebuild-per-parse by 4x (`go/perf_test.go`, `ts/test/perf.test.ts`) |
 | `tests/embed_test.rs` | the embedded grammar equals `../csv-grammar.jsonic` |
 | `tests/version_test.rs` | Cargo.toml == `VERSION` == ts/package.json |
-| `tests/translate_test.rs` | the translation part: the embedded manifest is `../tabnas.plugin.json`, and its `translate` object reads a tree and writes records through the `csv` render alchemy carries, and its loss lines are sentences |
-| `translate/` | the crate's copy of `../tabnas.plugin.json` (as `manifest.json`), which a packaged crate needs; `tests/translate_test.rs` holds it to the file |
+| `tests/translate_test.rs` | the translation part: the embedded manifest is `../tabnas.plugin.json`, the embed it names is the one `translate()` carries (none, for CSV), its `translate` object reads a tree and writes records from the root array through the `csv` render alchemy carries, and its loss lines are sentences |
+| `translate/` | the crate's copy of `../tabnas.plugin.json` (as `manifest.json`), which a packaged crate needs, written by `npm run embed` in `../ts`; `tests/translate_test.rs` holds it to the file |
 | `tests/common/mod.rs` | shared helpers: the per-row parser, the `jsonicOpt` applier, JSON flattening, failure conversion |
 | `README.md` | the crate front page, prose-gated; its `rust` fences are doctests of this crate (see below) |
 
