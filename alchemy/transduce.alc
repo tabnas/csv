@@ -1,0 +1,107 @@
+; CSV's transducer part: the document's JSON events from the csv grammar's
+; rule passes, for a host that reads parser events (alchemy-cli's
+; `translate` and `run --grammar csv`). It is hand-written, since the
+; grammar builds its records in its actions, which the passes do not
+; show: the walk of the grammar's value under its default options is an
+; array of one object per record after the first, keyed by the first
+; record's cells, the header, and every event here is the one that walk
+; gives.
+;
+; The passes: `csv` opens and closes the document; `record` opens and
+; closes each record (a blank line is none, with `record.empty` off); a
+; cell's `val` closes with the cell's value, a quoted field's text, an
+; unquoted field's text with the spaces it holds, or what the grammar
+; resolved it to where its options type a cell; an `elem` that opens
+; without pushing a `val` is an empty cell before a separator, and an
+; `elem` whose close gives its token back on the comma group is an empty
+; cell at the record's end; `list`, `newline` and `text` pass by. A
+; record's cells are keyed by the header's cells in order, a cell past
+; the header's width by `field~` and its position (the grammar's
+; `field.nonameprefix`), and a header cell a record lacks holds the
+; empty string (`field.empty`). A header name repeated is streamed twice,
+; as the record spells it, where the walk keeps the last value: the tree
+; contract a host puts after the part refuses it, and the host reads the
+; document whole.
+;
+; The state is [phase names cells]: the phase (:before the document,
+; :header, :row, :done), the header's cells once read, and a marker per
+; cell of the current record so far, so nothing grows with the document's
+; length, only with a record's width, under max_metadata_bytes. A step's
+; outputs are one vector, and a record's missing cells are as many pairs
+; as the header has left, so the part is two scans: the first yields each
+; cell as a [name value] pair and each container as a keyword, and the
+; second writes each as its events.
+
+; A cell: a header cell is kept as a name; a record's cell is yielded
+; under the header's name at its position, or `field~` and the position.
+def csv-transduce-cell [value state]
+  match state
+    case [:header names cells] (transition [:header (push value names) cells] [])
+    case [:row names cells]
+      let [n (count cells)]
+        match (get-path (path n) names)
+          case missing (transition [:row names (push true cells)] [[(string-join "" ["field~" (scalar-text (record) n)]) value]])
+          case name (transition [:row names (push true cells)] [[name value]])
+    case _ (transition state [])
+
+; The header cells a record lacks, each as the empty string.
+def csv-transduce-fills [names cells]
+  map (fn [j] [(get-path (path j) names) ""]) (filter (fn [j] (match (compare j (count cells)) (case :less false) (case _ true))) (indices names))
+
+def csv-transduce-step [state pass]
+  match pass
+    case (open rule)
+      match (get :name rule)
+        case "csv" (transition [:header [] []] [:array-start])
+        case "record"
+          match state
+            case [:row names cells] (transition [:row names []] [:object-start])
+            case _ (transition state [])
+        case "elem"
+          match (get :alt rule)
+            case missing (transition state [])
+            case alt
+              match (get :p alt)
+                case "" (csv-transduce-cell "" state)
+                case _ (transition state [])
+        case _ (transition state [])
+    case (close rule)
+      match (get :name rule)
+        case "val"
+          match (get :value rule)
+            case missing (transition state [])
+            case value (csv-transduce-cell value state)
+        case "elem"
+          match (get :alt rule)
+            case missing (transition state [])
+            case alt
+              match [(get :r alt) (get :g alt)]
+                case ["" ["comma"]] (csv-transduce-cell "" state)
+                case _ (transition state [])
+        case "record"
+          match state
+            case [:header names cells] (transition [:row names []] [])
+            case [:row names cells] (transition [:row names []] (push :object-end (csv-transduce-fills names cells)))
+            case _ (transition state [])
+        case "csv" (transition [:done [] []] [:array-end])
+        case _ (transition state [])
+
+; An empty document makes no pass at all, and its value is the empty
+; array.
+def csv-transduce-finish [state]
+  match state
+    case [:before names cells] [:array-start :array-end]
+    case [:done names cells] []
+    case _ (fail :protocol-order "the rule passes ended inside the document, which a csv parse's never do")
+
+; Each item of the first scan as its events.
+def csv-transduce-expand [state item]
+  match item
+    case :array-start (transition state [array-start])
+    case :array-end (transition state [array-end])
+    case :object-start (transition state [object-start])
+    case :object-end (transition state [object-end])
+    case [name value] (transition state [(key name) (scalar value)])
+
+def csv-transduce [input]
+  as-events (scan-emit [] csv-transduce-expand (fn [state] []) (scan-emit [:before [] []] csv-transduce-step csv-transduce-finish (parser-events input)))

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -29,6 +30,46 @@ func TestTranslationParts(t *testing.T) {
 	}
 	if parts.Render.Source != "" {
 		t.Fatal("alchemy's builtin CSV render has no package source")
+	}
+	if parts.Transduce == nil || parts.Transduce.Entry != "csv-transduce" || parts.Transduce.Source == "" {
+		t.Fatalf("transduce entry is %#v", parts.Transduce)
+	}
+}
+
+// A transducer makes the format's JSON events of its parser's rule passes.
+// CSV's is alchemy/transduce.alc, which the manifest names and the
+// package embeds under the entry csv-transduce: the copy is held to the
+// file.
+func TestTranslationTransduce(t *testing.T) {
+	inCheckout(t)
+	manifest, err := os.ReadFile("../tabnas.plugin.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec struct {
+		Translate struct {
+			Transduce *string `json:"transduce"`
+		} `json:"translate"`
+	}
+	if err := json.Unmarshal(manifest, &spec); err != nil {
+		t.Fatal(err)
+	}
+	if spec.Translate.Transduce == nil || *spec.Translate.Transduce != "alchemy/transduce.alc" {
+		t.Fatalf("the manifest names the transducer %v", spec.Translate.Transduce)
+	}
+	transduce, err := os.ReadFile("../" + *spec.Translate.Transduce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(transduce), "def csv-transduce [input]") {
+		t.Fatalf("%s does not define csv-transduce", *spec.Translate.Transduce)
+	}
+	parts := Translate()
+	if parts.Transduce == nil || parts.Transduce.Entry != "csv-transduce" {
+		t.Fatalf("transduce entry is %#v", parts.Transduce)
+	}
+	if parts.Transduce.Source != string(transduce) {
+		t.Fatalf("embedded transducer differs from %s", *spec.Translate.Transduce)
 	}
 }
 
@@ -74,18 +115,26 @@ func TestTranslationEmbed(t *testing.T) {
 func TestTranslateReturnsACopy(t *testing.T) {
 	first := Translate()
 	want := *Translate().Render
+	wantTransduce := *Translate().Transduce
 	first.Manifest = ""
 	if first.Render != nil {
 		first.Render.Entry = ""
 		first.Render.Source = ""
 	}
-	first.Lift, first.Embed, first.Render = nil, nil, nil
+	if first.Transduce != nil {
+		first.Transduce.Entry = ""
+		first.Transduce.Source = ""
+	}
+	first.Lift, first.Embed, first.Render, first.Transduce = nil, nil, nil, nil
 	second := Translate()
 	if second.Manifest == "" {
 		t.Fatal("a change to one call's manifest reached the next call")
 	}
 	if second.Render == nil || *second.Render != want {
 		t.Fatalf("a change to one call's render reached the next call: %#v", second.Render)
+	}
+	if second.Transduce == nil || *second.Transduce != wantTransduce {
+		t.Fatalf("a change to one call's transducer reached the next call: %#v", second.Transduce)
 	}
 }
 

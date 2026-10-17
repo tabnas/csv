@@ -45,6 +45,7 @@
     "writes": "records",
     "root": "array",
     "render": "csv",
+    "transduce": "alchemy/transduce.alc",
     "loss": [
       "The rows are the elements of the root array, and a root of another kind is written as one row.",
       "The columns are the first row's, an object's keys or an array's positions labelled 0, 1 and so on, so a member or position of a later row that the first row lacks is not written, and one the first row has and a later row lacks is an empty field.",
