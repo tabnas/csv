@@ -50,6 +50,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+A parser from `make()` or `make_with()` also reads a source from a reader, such as a file,
+with `parse_reader`. It holds a window of the text as it parses, never the
+whole document, and gives what `parse` gives for the same text.
+
 Options are a struct, with the defaults the TypeScript plugin documents.
 `object: false` gives arrays, `header: false` keeps the first row as data,
 `field.separation` and `record.separators` change the separators, and
