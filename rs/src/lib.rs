@@ -1028,60 +1028,111 @@ pub fn csv_string_matcher(
         let allow_control = options.string.allow_control;
         Some(Arc::new(
             move |lexer: &mut tabnas::Lexer<'_>, _rule: &mut Rule, _context: &mut Context| {
-                let rest = lexer.remaining();
-                if !rest.starts_with(quote.as_str()) {
+                if !lexer.window().starts_with(quote.as_str()) {
                     return None;
                 }
                 let point = lexer.point();
-                let mut text = String::new();
-                let mut at = quote.len();
-                let mut closed = false;
-
-                while at < rest.len() {
-                    let tail = &rest[at..];
-                    if tail.starts_with(quote.as_str()) {
-                        at += quote.len();
-                        // A doubled quote is one literal quote; a single
-                        // one closes the field.
-                        if rest[at..].starts_with(quote.as_str()) {
-                            text.push_str(&quote);
-                            at += quote.len();
-                        } else {
-                            closed = true;
-                            break;
+                // The field is scanned in the text the lexer holds: the
+                // whole source, or in a parse from a reader the window
+                // (`lex.window`, admin ADR-30). A field the window ends
+                // inside is not unterminated until the source is: the
+                // window is asked for twice as much and the field scanned
+                // again, so a long field costs its length, not its square.
+                let (text, at) = loop {
+                    let rest = lexer.window();
+                    match scan_quoted(rest, quote.as_str(), &line_chars, allow_control) {
+                        Quoted::Closed { text, at } => break (text, at),
+                        Quoted::QuoteAtEnd { text, at } => {
+                            let held = rest[..at].chars().count();
+                            lexer.fill(held + 1);
+                            if lexer.window().len() > at {
+                                continue;
+                            }
+                            break (text, at);
                         }
-                        continue;
+                        Quoted::Control { at } => {
+                            // Any other control character is field text
+                            // when the engine's `string.allowControl` is
+                            // on, which the plugin turns on; only with it
+                            // off is the character refused. The diagnostic
+                            // points at the control character, as it does
+                            // in TypeScript.
+                            let count = rest[..at].chars().count();
+                            lexer.advance_chars(count);
+                            return Some(lexer.bad("unprintable"));
+                        }
+                        Quoted::Open { at } => {
+                            let held = rest[..at].chars().count();
+                            // `fill` says whether that much lies ahead; the
+                            // source may end sooner and still have given
+                            // more, which is scanned again.
+                            lexer.fill(held.saturating_mul(2).max(held + 1));
+                            if lexer.window().len() > at {
+                                continue;
+                            }
+                            let start = point.site.pos;
+                            return Some(lexer.bad_span(
+                                "unterminated_string",
+                                start,
+                                start + held,
+                            ));
+                        }
                     }
-                    let character = tail.chars().next().expect("inside the source");
-                    if line_chars.contains(&character) {
-                        text.push(character);
-                    } else if (character as u32) < 32 && !allow_control {
-                        // Any other control character is field text when
-                        // the engine's `string.allowControl` is on, which
-                        // the plugin turns on; only with it off is the
-                        // character refused. The diagnostic points at the
-                        // control character, as it does in TypeScript.
-                        lexer.advance_chars(rest[..at].chars().count());
-                        return Some(lexer.bad("unprintable"));
-                    } else {
-                        text.push(character);
-                    }
-                    at += character.len_utf8();
-                }
+                };
 
-                if !closed {
-                    let start = point.site.pos;
-                    let end = start + rest[..at].chars().count();
-                    return Some(lexer.bad_span("unterminated_string", start, end));
-                }
-
-                let source = rest[..at].to_string();
+                let source = lexer.window()[..at].to_string();
                 let token = lexer.token("#ST", TIN_ST, Value::String(text), source.as_str(), point);
                 lexer.advance_chars(source.chars().count());
                 Some(token)
             },
         ))
     }
+}
+
+/// Where a quoted field's scan ended, in the text it was given.
+enum Quoted {
+    /// The closing quote: the field's text, and the byte just past it.
+    Closed { text: String, at: usize },
+    /// A quote that is the last character the text holds: the field's text
+    /// before it, and the byte just past it.
+    QuoteAtEnd { text: String, at: usize },
+    /// A control character the field may not hold, at this byte.
+    Control { at: usize },
+    /// The text ended first, at this byte: the field is unterminated, or
+    /// goes on past what the lexer holds.
+    Open { at: usize },
+}
+
+/// Scan the quoted field `rest` starts with, its opening quote included: a
+/// doubled quote is one literal quote, a single one closes the field.
+fn scan_quoted(rest: &str, quote: &str, line_chars: &[char], allow_control: bool) -> Quoted {
+    let mut text = String::new();
+    let mut at = quote.len();
+    while at < rest.len() {
+        let tail = &rest[at..];
+        if tail.starts_with(quote) {
+            at += quote.len();
+            if rest[at..].starts_with(quote) {
+                text.push_str(quote);
+                at += quote.len();
+                continue;
+            }
+            if at == rest.len() {
+                // The quote is the last character held: it closes the field
+                // if the source ends here, and is half of a doubled quote if
+                // another follows past what the lexer holds.
+                return Quoted::QuoteAtEnd { text, at };
+            }
+            return Quoted::Closed { text, at };
+        }
+        let character = tail.chars().next().expect("inside the text");
+        if !line_chars.contains(&character) && (character as u32) < 32 && !allow_control {
+            return Quoted::Control { at };
+        }
+        text.push(character);
+        at += character.len_utf8();
+    }
+    Quoted::Open { at }
 }
 
 // ---------------------------------------------------------------------------
@@ -1589,6 +1640,15 @@ pub fn make_with(options: CsvOptions) -> Tabnas {
     parser
         .use_plugin(plugin_with(options), None)
         .expect("the csv grammar documents are fixed and valid");
+    // The quoted field, the one token this grammar cuts itself, reads the
+    // source only through the lexer's window and fill, and jsonic's base
+    // is the engine's own matchers, so a parse from a reader may hold a
+    // window of the source rather than all of it (`Tabnas::parse_reader`,
+    // admin ADR-30). Set on the parser this crate makes whole, not in
+    // [`csv`].
+    parser
+        .set_options(|options| options.lex.window = true)
+        .expect("lex.window sets");
     parser
 }
 
