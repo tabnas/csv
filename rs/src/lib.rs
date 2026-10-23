@@ -1380,12 +1380,12 @@ fn strict_rules(parser: &mut Tabnas, tokens: &Tokens, empty: &Value) {
     let at_end = empty.clone();
     parser.define_rule("elem", move |spec| {
         spec.clear();
-        let mut comma = alt(vec![vec![ca]], 1, "");
+        let mut comma = alt(vec![vec![ca]], 1, "empty");
         comma.add_action(empty_before_comma(before_comma));
         spec.add_open(comma);
         spec.add_open(push_alt("val"));
 
-        let mut trailing = alt(vec![vec![ca], vec![ln, zz]], 1, "comma");
+        let mut trailing = alt(vec![vec![ca], vec![ln, zz]], 1, "comma,empty");
         trailing.add_action(empty_at_end(at_end));
         spec.add_close(trailing);
         // Next element.
@@ -1463,11 +1463,11 @@ fn relaxed_rules(parser: &mut Tabnas, tokens: &Tokens, empty: &Value) {
     let before_comma = empty.clone();
     let at_end = empty.clone();
     parser.define_rule("elem", move |spec| {
-        let mut comma = alt(vec![vec![ca]], 1, "");
+        let mut comma = alt(vec![vec![ca]], 1, "empty");
         comma.add_action(empty_before_comma(before_comma));
         prepend_open(spec, vec![comma]);
 
-        let mut trailing = alt(vec![vec![ca], vec![ln, zz]], 1, "comma");
+        let mut trailing = alt(vec![vec![ca], vec![ln, zz]], 1, "comma,empty");
         trailing.add_action(empty_at_end(at_end));
         prepend_close(spec, vec![trailing, alt(vec![vec![ln]], 1, "end")]);
     });

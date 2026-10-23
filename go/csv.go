@@ -615,7 +615,7 @@ func Csv(j *tabnas.Tabnas, options map[string]any) error {
 		j.Rule("elem", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 			rs.Clear()
 			rs.AddOpen(
-				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}}, B: 1,
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}}, B: 1, G: "empty",
 					A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
@@ -628,7 +628,7 @@ func Csv(j *tabnas.Tabnas, options map[string]any) error {
 				&tabnas.AltSpec{P: "val"},
 			)
 			rs.AddClose(
-				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma,empty",
 					A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
@@ -693,7 +693,7 @@ func Csv(j *tabnas.Tabnas, options map[string]any) error {
 
 		j.Rule("elem", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 			rs.PrependOpen(&tabnas.AltSpec{
-				S: [][]tabnas.Tin{{CA}}, B: 1,
+				S: [][]tabnas.Tin{{CA}}, B: 1, G: "empty",
 				A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 					if arr, ok := r.Node.([]any); ok {
 						r.Node = append(arr, emptyField)
@@ -705,7 +705,7 @@ func Csv(j *tabnas.Tabnas, options map[string]any) error {
 				}),
 			})
 			rs.PrependClose(
-				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma",
+				&tabnas.AltSpec{S: [][]tabnas.Tin{{CA}, {LN, ZZ}}, B: 1, G: "comma,empty",
 					A: tabnas.AltAction(func(r *tabnas.Rule, ctx *tabnas.Context) {
 						if arr, ok := r.Node.([]any); ok {
 							r.Node = append(arr, emptyField)
