@@ -474,6 +474,7 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
           {
             s: [CA],
             b: 1,
+            g: 'empty',
             a: (r: Rule) => {
               r.node.push(options.field.empty)
               r.u.done = true
@@ -487,7 +488,7 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
             s: [CA, [LN, ZZ]],
             b: 1,
             a: (r: Rule) => r.node.push(options.field.empty),
-            g: 'comma',
+            g: 'comma,empty',
           },
           // Next element.
           { s: [CA], r: 'elem', g: 'comma' },
@@ -565,6 +566,7 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
           {
             s: [CA],
             b: 1,
+            g: 'empty',
             a: (r: Rule) => {
               r.node.push(options.field.empty)
               r.u.done = true
@@ -577,7 +579,7 @@ const Csv: Plugin = (tn: Tabnas, options: CsvOptions) => {
             s: [CA, [LN, ZZ]],
             b: 1,
             a: (r: Rule) => r.node.push(options.field.empty),
-            g: 'comma',
+            g: 'comma,empty',
           },
           // LN ends record.
           { s: [LN], b: 1, g: 'end' },
