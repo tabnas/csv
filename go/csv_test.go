@@ -697,11 +697,28 @@ func TestRecordsKeepTheHeaderOrder(t *testing.T) {
 
 // parseFixture parses CSV with optional jsonic-level options for fixtures.
 func parseFixture(src string, pluginOpts map[string]any, jsonicOpts map[string]any) ([]any, error) {
-	if len(jsonicOpts) == 0 {
-		return csvParse(src, pluginOpts)
+	result, err := fixtureParser(pluginOpts, jsonicOpts).Parse(src)
+	if err != nil {
+		return nil, err
 	}
+	if result == nil {
+		return []any{}, nil
+	}
+	if arr, ok := result.([]any); ok {
+		return arr, nil
+	}
+	return []any{}, nil
+}
 
+// fixtureParser builds the parser a fixture's options name: jsonic, the
+// engine options applied to it (the manifest's jsonicOpt, a corpus case's
+// jsonicOpts), then the plugin with its own options.
+func fixtureParser(pluginOpts map[string]any, jsonicOpts map[string]any) *jsonic.Jsonic {
 	j := jsonic.Make()
+	if len(jsonicOpts) == 0 {
+		j.UseDefaults(Csv, Defaults, pluginOpts)
+		return j
+	}
 
 	// Apply jsonicOpt: value.def
 	//
@@ -767,18 +784,7 @@ func parseFixture(src string, pluginOpts map[string]any, jsonicOpts map[string]a
 	}
 
 	j.UseDefaults(Csv, Defaults, pluginOpts)
-
-	result, err := j.Parse(src)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return []any{}, nil
-	}
-	if arr, ok := result.([]any); ok {
-		return arr, nil
-	}
-	return []any{}, nil
+	return j
 }
 
 // Helpers

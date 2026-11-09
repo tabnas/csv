@@ -763,17 +763,44 @@ func BuildCsvStringMatcher(stringOpts map[string]any) tabnas.MakeLexMatcher {
 			pnt := lex.Cursor()
 			src := lex.Src
 			sI := pnt.SI
-			srclen := len(src)
 
 			if !singleCodeUnit {
 				return nil
 			}
 
-			if sI >= srclen || !strings.HasPrefix(src[sI:], quote) {
+			// The field is read through the lexer's window, so that a parse
+			// from a reader may hold a window of the source (lex.window,
+			// admin ADR-30): there lex.Src is the window, which may end
+			// inside the field. Where the scan reaches the window's end,
+			// held asks it to fill to twice what the scan has read, so a
+			// long field costs its length to read and not its square, and
+			// the scan carries on over the grown lex.Src, whose positions do
+			// not move while a token is cut. A field so ends where the whole
+			// text ends it. In a whole text Lex.Fill only answers. The
+			// window holds whole characters, so a quote of one code unit is
+			// whole wherever its first byte is held.
+			held := func(i int) bool {
+				if i < len(src) {
+					return true
+				}
+				read := i - pnt.SI
+				lex.Fill(max(read+1, 2*read))
+				src = lex.Src
+				return i < len(src)
+			}
+
+			if !held(sI) || !strings.HasPrefix(src[sI:], quote) {
 				return nil
 			}
 
 			// Only match when quote is at the start of a field.
+			//
+			// This reads back from the quote no further than the longest
+			// fixed token, or one character. In a parse from a reader the
+			// window still holds that text: it keeps the text from the
+			// oldest token the parser holds and from the end of the last
+			// one it does not ignore, and the separator or line before a
+			// field is one of those.
 			//
 			// What precedes the quote must be tested as TEXT, not as a single
 			// byte: a fixed token can be several characters long (a multi-char
@@ -815,12 +842,12 @@ func BuildCsvStringMatcher(stringOpts map[string]any) tabnas.MakeLexMatcher {
 			cI += qLen
 
 			var s strings.Builder
-			for sI < srclen {
+			for held(sI) {
 				cI++
 				if strings.HasPrefix(src[sI:], q) {
 					sI += qLen
 					cI += qLen - 1
-					if sI < srclen && strings.HasPrefix(src[sI:], q) {
+					if held(sI) && strings.HasPrefix(src[sI:], q) {
 						s.WriteString(q)
 						sI += qLen
 						cI += qLen
@@ -862,7 +889,7 @@ func BuildCsvStringMatcher(stringOpts map[string]any) tabnas.MakeLexMatcher {
 
 				bI := sI
 				qFirst := q[0]
-				for sI < srclen && src[sI] >= 32 && src[sI] != qFirst {
+				for held(sI) && src[sI] >= 32 && src[sI] != qFirst {
 					if cfg.LineChars[rune(src[sI])] {
 						break
 					}
@@ -918,7 +945,7 @@ var Defaults = map[string]any{
 
 // Make builds a CSV parser instance: a jsonic engine with this plugin
 // installed and configured with options, the counterpart of TS
-// make(options) and Rust make_with(CsvOptions). It is exactly
+// make(options) and Rust make_with(CsvOptions). It is
 //
 //	j := jsonic.Make()
 //	err := j.UseDefaults(Csv, Defaults, options)
@@ -927,6 +954,14 @@ var Defaults = map[string]any{
 // and this is only a way to call it. The option keys are the plugin's own
 // (see Defaults). More than one map is merged in order, a later key
 // winning, the way UseDefaults merges one over Defaults.
+//
+// It also declares lex.window, so that Tabnas.ParseReader reads a reader a
+// window at a time rather than whole (admin ADR-30): the quoted field, the
+// one token this grammar cuts itself, reads the source only through the
+// window, and jsonic's base reads it through the window too (jsonic
+// 0.7.11). The window is declared here, on the parser this package makes
+// whole, and not in Csv, which a host may install beneath matchers of its
+// own.
 //
 // It returns an error rather than panicking, unlike a Make that takes
 // only engine options, because the options here are the caller's data
@@ -951,6 +986,8 @@ func Make(options ...map[string]any) (*tabnas.Tabnas, error) {
 	if err != nil {
 		return nil, err
 	}
+	yes := true
+	j.SetOptions(tabnas.Options{Lex: &tabnas.LexOptions{Window: &yes}})
 	return j, nil
 }
 

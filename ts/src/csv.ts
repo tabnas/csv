@@ -615,9 +615,25 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
 
       let { pnt, src } = lex
       let { sI, rI, cI } = pnt
-      let srclen = src.length
 
-      if (quoteMap[src[sI]]) {
+      // The field is read through the lexer's window, so that a parse from
+      // a reader may hold a window of the source (`lex.window`, admin
+      // ADR-30): there `lex.src` is the window, which may end inside the
+      // field. Where the scan reaches the window's end, `held` asks it to
+      // fill to twice what the scan has read, so a long field costs its
+      // length to read and not its square, and the scan carries on over the
+      // grown `lex.src`, whose positions do not move while a token is cut.
+      // A field so ends where the whole text ends it. In a whole text
+      // `lex.fill` only answers.
+      const held = (i: number): boolean => {
+        if (i < src.length) return true
+        const read = i - pnt.sI
+        lex.fill(Math.max(read + 1, 2 * read))
+        src = lex.src
+        return i < src.length
+      }
+
+      if (held(sI) && quoteMap[src[sI]]) {
         const q = src[sI] // Quote character
         const qI = sI
         const qrI = rI
@@ -635,7 +651,7 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
         // inputs were silently accepted as terminated strings.
         let closed = false
 
-        for (sI; sI < srclen; sI++) {
+        for (sI; held(sI); sI++) {
           cI++
           let c = src[sI]
 
@@ -644,7 +660,7 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
             sI++
             cI++
 
-            if (q === src[sI]) {
+            if (held(sI) && q === src[sI]) {
               s.push(q)
             } else {
               closed = true
@@ -659,8 +675,8 @@ function buildCsvStringMatcher(csvopts: CsvOptions) {
             let qc = q.charCodeAt(0)
             let cc = src.charCodeAt(sI)
 
-            while (sI < srclen && 32 <= cc && qc !== cc) {
-              cc = src.charCodeAt(++sI)
+            while (32 <= cc && qc !== cc) {
+              cc = held(++sI) ? src.charCodeAt(sI) : NaN
               cI++
             }
             cI--
@@ -754,11 +770,20 @@ type CsvMakeOptions = Partial<Omit<CsvOptions, 'field' | 'record' | 'string'>> &
 
 // Create a CSV parser instance: a tabnas engine with the jsonic base
 // grammar and this plugin installed, configured with `options`. It is
-// exactly `new Tabnas().use(jsonic).use(Csv, options)`, the counterpart
-// of the Go `Make` and the Rust `make_with`, so the two routes cannot
-// drift: there is one plugin and this is only a way to call it.
+// `new Tabnas().use(jsonic).use(Csv, options)`, the counterpart of the Go
+// `Make` and the Rust `make_with`, so the two routes cannot drift: there
+// is one plugin and this is only a way to call it.
+//
+// It also declares `lex.window`, so that `tn.parseReader` reads a reader a
+// window at a time rather than whole (admin ADR-30): the quoted field, the
+// one token this grammar cuts itself, reads the source only through the
+// window, and jsonic's base is the engine's own matchers. The window is
+// declared here, on the parser this package makes whole, and not in `Csv`,
+// which a host may install beneath matchers of its own.
 function make(options?: CsvMakeOptions): Tabnas {
-  return new Tabnas().use(jsonic).use(Csv, options ?? {})
+  const tn = new Tabnas().use(jsonic).use(Csv, options ?? {})
+  tn.options({ lex: { window: true } })
+  return tn
 }
 
 export { Csv, make, buildCsvStringMatcher, VERSION }
