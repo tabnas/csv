@@ -14,6 +14,7 @@ what is specific to this crate.
 | `tests/csv_test.rs` | the in-language port of `go/csv_test.go` and `ts/test/csv.test.ts`: the `../test/fixtures` manifest corpus (with its engine-level `jsonicOpt`), the API surface, streaming, typed options, `field.exact` messages, prototype-pollution keys, `derive`, threads |
 | `tests/conformance_test.rs` | the two third-party corpora vendored under `../test/suites`, with the divergence table; FAILS when a corpus is absent |
 | `tests/csv_export_test.rs` | the exported string matcher on a plain jsonic instance (`go/csv_export_test.go`) |
+| `tests/reader_test.rs` | a parse from a reader: `make()` declares `lex.window`; every spec row, committed fixture and suite document parses the same from a reader as from its text, in small pieces and under windows of a few characters; quoted fields meet the window's edge at every place; long fields and documents too (root `AGENTS.md`, "The whole parser, and a parse from a reader") |
 | `tests/perf_test.rs` | instance reuse beats rebuild-per-parse by 4x (`go/perf_test.go`, `ts/test/perf.test.ts`) |
 | `tests/embed_test.rs` | the embedded grammar equals `../csv-grammar.jsonic` |
 | `tests/version_test.rs` | Cargo.toml == `VERSION` == ts/package.json |

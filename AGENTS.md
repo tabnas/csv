@@ -80,7 +80,7 @@ There are three implementations that must behave identically — TypeScript
 | Path | What it is |
 |---|---|
 | [`ts/`](ts/) | **Canonical** TypeScript implementation — the `@tabnas/csv` package. Plugin in `src/csv.ts`, which also exports `make(options)` (`new Tabnas().use(jsonic).use(Csv, options)` in one call). Imports the engine as `@tabnas/parser` and the base grammar as `@tabnas/jsonic`. |
-| [`go/`](go/) | Go port — `github.com/tabnas/csv/go`. Plugin in `csv.go`, which also exports `Make(options...)` (`jsonic.Make()` + `UseDefaults(Csv, Defaults, options)`, returning the plugin's error). Requires `github.com/tabnas/parser/go`, imported as `tabnas` for the engine's types, and `github.com/tabnas/jsonic/go` for jsonic's own `jsonic.Make`, which builds the base engine and reads the grammar text. |
+| [`go/`](go/) | Go port — `github.com/tabnas/csv/go`. Plugin in `csv.go`, which also exports `Make(options...)` (`jsonic.Make()` + `UseDefaults(Csv, Defaults, options)`, returning the plugin's error, with `lex.window` declared). Requires `github.com/tabnas/parser/go`, imported as `tabnas` for the engine's types, and `github.com/tabnas/jsonic/go` for jsonic's own `jsonic.Make`, which builds the base engine and reads the grammar text. |
 | [`rs/`](rs/) | Rust port: the `tabnas-csv` crate (library `tabnas_csv`). Plugin in `src/lib.rs`, a grammar plugin for the Rust `tabnas` engine over the `tabnas-jsonic` base, mirroring the same split. Supplies `csv` / `plugin()` / `plugin_with()` (the engine plugin), `CsvOptions`, `csv_string_matcher`, and `make` / `make_with` / `parse`. Depends on sibling `tabnas/parser`, `tabnas/jsonic` (which brings `tabnas/json`) and (tests only) `tabnas/support` checkouts via Cargo `path` dependencies. `rs/AGENTS.md` has the crate-specific hazards. |
 | [`csv-grammar.jsonic`](csv-grammar.jsonic) | The grammar, **source of truth for every runtime**. Embedded verbatim into all three source files. Lives at the repo root — `ts/embed-grammar.js` reads `../csv-grammar.jsonic`. |
 | [`tabnas.plugin.json`](tabnas.plugin.json) | Machine-readable plugin descriptor — name, base, grammar, extensions, error codes. Consumed by agent tooling. It deliberately carries **no version**: `versionSource` names `ts/package.json` instead, so this file cannot become a fourth place for the version to drift. Keep `errorCodes` in step with `options: error:` in the grammar. It also carries the format's **translation part**: the `translate` object says CSV reads as a tree (one object per record, keyed by the header) and writes from records through the `csv` render [alchemy](https://github.com/tabnas/alchemy) carries, that the records are the elements of the root array (`root`, `array`: a host makes any other root the one element of an array first), and its `loss` lines, which a host prints verbatim, say what that render changes: the rows and columns a tree's records take, the empty field, and a number that is not finite written as its word. Its `translate.transduce` names the format's **transducer part**, [`alchemy/transduce.alc`](alchemy/transduce.alc): the document's JSON events from the csv grammar's rule passes, hand-written since the grammar builds its records in its actions, through which a host that reads parser events (alchemy-cli's `translate` and `run --grammar`) reads a document under the grammar's default options: an array of one object per record after the first, keyed by the header's cells, a cell past the header keyed `field~` and its position, a cell a record lacks the empty string, every event the one the walk of the grammar's value gives, a header name repeated aside, which the part streams twice and a host's tree contract refuses. `npm run embed` in `ts/` (which `npm run build` runs) copies the manifest and the transducer into every runtime (`ts/src/translate.ts`, `go/translate/` and `rs/translate/`, which the Rust crate also serves as `manifest_text()`), and each runtime's translation test holds the copies to the files: change a file at the root, then run the embed, never a copy by hand. |
@@ -230,6 +230,50 @@ rules so embedded JSON values keep working. Rust does the same through
 - Token legends: the plugin registers human descriptions for CSV tokens
   via `config.modify` → `cfg.tokenDesc`, which `@tabnas/railroad` reads
   off the live config when drawing the diagram legend.
+
+## The whole parser, and a parse from a reader (`lex.window`)
+
+Each runtime's constructor builds the parser whole, jsonic's base with the
+plugin installed, and declares `lex.window` on it, so that a parse from a
+reader is read a window at a time rather than whole (admin ADR-30 and
+ADR-33):
+
+| Runtime | Constructor | Builds |
+|---|---|---|
+| TypeScript | `make(options?)` | `new Tabnas().use(jsonic).use(Csv, options)` |
+| Go | `Make(options ...map[string]any)` | `jsonic.Make()` then `j.UseDefaults(Csv, Defaults, options)` |
+| Rust | `make()`, `make_with(options)` | `tabnas_jsonic::make()` then `use_plugin(plugin_with(options))` |
+
+Hosts call these (dmog among them) rather than composing the plugin
+themselves, so that the window reaches the parser they read with. The
+window is declared on the whole parser, after the plugin, and never in
+the plugin (`Csv`, `csv`, `plugin()`), which a host may install beneath
+matchers of its own, nor in jsonic's constructors, which stay window-less
+as the base other grammars build on.
+
+It may be declared because the quoted field, the one token this grammar
+cuts itself, reads the source only through the window: where its scan
+reaches the window's end, it asks the window to fill (`lex.fill`,
+`Lex.Fill`, `Lexer::fill`) and carries on, so a field ends where the whole
+text ends it, and every other token is the engine's or jsonic's, which
+read through the window too (jsonic 0.7.11). Go's matcher also reads back
+from a quote to the separator or line before it, which the window still
+holds: it keeps the text from the oldest token the parser holds and from
+the end of the last one it does not ignore. A matcher or action added here
+that reads the text must read it through the window too, or the
+constructors must stop declaring it.
+
+The reader tests hold all three to that (`ts/test/window.test.ts`,
+`go/window_test.go`, `rs/tests/reader_test.rs`): the constructor
+declares the window and the plugin does not; every row of the shared
+fixtures, every committed fixture and every document of the two vendored
+suites parses the same from a reader, in pieces of 1, 3 and 64 bytes, as
+from its text, in TypeScript and Rust under windows of a few characters as
+well as the engine's own; quoted fields meet the window's edge at every
+place; and long fields and long documents parse the same, an error at
+the end placed where the whole text places it. Go's small-window hook is
+unexported, so Go reaches the window's edge with fields longer than its
+64 KiB margin, each feature shifted across the edge a byte at a time.
 
 ## Conformance
 
