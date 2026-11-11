@@ -137,7 +137,10 @@ func TestMakeDeclaresTheWindow(t *testing.T) {
 	if !j.Config().Window {
 		t.Error("Make does not declare lex.window")
 	}
-	plain := jsonic.Make()
+	// jsonic's base declares the window itself (tabnas/jsonic#121), so the
+	// plugin goes on that base with the window turned off.
+	no := false
+	plain := jsonic.Make(tabnas.Options{Lex: &tabnas.LexOptions{Window: &no}})
 	if err := plain.UseDefaults(Csv, Defaults); err != nil {
 		t.Fatal(err)
 	}
