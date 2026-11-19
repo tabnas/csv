@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "tabnas-csv"
-version = "0.6.10"
+version = "0.6.11"
 dependencies = [
  "indexmap",
  "serde",
