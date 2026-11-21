@@ -81,7 +81,7 @@ const TRANSLATION: TranslationParts = Object.freeze({
 `,
   render: Object.freeze({ entry: "csv" }),
   transduce: Object.freeze({ entry: "csv-transduce", source: `; CSV's transducer part: the document's JSON events from the csv grammar's
-; rule passes, for a host that reads parser events (alchemy-cli's
+; rule passes, for a host that reads parser events (dmog's
 ; \`translate\` and \`run --grammar csv\`, aless's export). The walk of the
 ; grammar's value under its default options is an array of one object
 ; per record after the first, keyed by the first record's cells, the
